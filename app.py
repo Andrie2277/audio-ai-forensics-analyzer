@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -49,6 +50,261 @@ DATASET_ROOT = Path(__file__).with_name("data")
 DATASET_CSV_PATH = Path(__file__).with_name("dataset.csv")
 FEATURE_STORE_PATH = Path(__file__).with_name(str(DEFAULT_FEATURE_STORE_PATH))
 SYNC_REPORT_PATH = Path(__file__).with_name("feature_store_sync_report.json")
+
+TRANSLATIONS = {
+    "header_kicker": {"id": "Audio Screening Workspace", "en": "Audio Screening Workspace"},
+    "header_title": {"id": "Audio AI Forensics Analyzer", "en": "Audio AI Forensics Analyzer"},
+    "header_subtitle": {
+        "id": "Dashboard ini dipakai untuk analisis audio, evaluasi hasil forensik, penyimpanan data training, dan retraining model dari feature store tanpa harus menyimpan semua file audio lama.",
+        "en": "This dashboard is used for audio analysis, forensic review, training data management, and model retraining from a feature store without keeping all legacy audio files.",
+    },
+    "language_label": {"id": "Bahasa / Language", "en": "Language / Bahasa"},
+    "workspace_summary_title": {"id": "Ringkasan Workspace", "en": "Workspace Summary"},
+    "workspace_summary_subtitle": {"id": "Status model, jumlah dataset, feature store, dan history analisis saat ini.", "en": "Current model status, dataset counts, feature store, and analysis history."},
+    "model_ready": {"id": "Siap dipakai", "en": "Ready"},
+    "model_warn": {"id": "Perlu perhatian", "en": "Needs attention"},
+    "feature_store_rows": {"id": "Feature store", "en": "Feature store"},
+    "history_items": {"id": "History", "en": "History"},
+    "rows": {"id": "baris", "en": "rows"},
+    "items": {"id": "item", "en": "items"},
+    "total_dataset": {"id": "Total Dataset", "en": "Total Dataset"},
+    "human": {"id": "Human", "en": "Human"},
+    "hybrid": {"id": "Hybrid", "en": "Hybrid"},
+    "ai": {"id": "AI", "en": "AI"},
+    "pure_ai": {"id": "Pure AI", "en": "Pure AI"},
+    "hint_total_dataset": {"id": "Jumlah file audio yang masih ada di folder data.", "en": "Number of audio files still present in the data folder."},
+    "hint_human": {"id": "Sampel berlabel human yang masih tersimpan.", "en": "Stored samples labeled human."},
+    "hint_hybrid": {"id": "Sampel berlabel hybrid yang masih tersimpan.", "en": "Stored samples labeled hybrid."},
+    "hint_ai": {"id": "Sampel berlabel AI yang masih tersimpan.", "en": "Stored samples labeled AI."},
+    "analysis_audio_title": {"id": "Analisis Audio", "en": "Audio Analysis"},
+    "analysis_audio_subtitle": {"id": "Upload file, pilih mode, lalu jalankan analisis dari satu tempat.", "en": "Upload a file, choose a mode, then run the analysis from one place."},
+    "upload_audio_label": {"id": "Upload Audio File (WAV/MP3/FLAC)", "en": "Upload Audio File (WAV/MP3/FLAC)"},
+    "analysis_mode_label": {"id": "Pilih Mode Analisis:", "en": "Choose Analysis Mode:"},
+    "mode_a": {"id": "Mode A: Analisis Ultra-Akurat + Grafik", "en": "Mode A: Deep Analysis + Charts"},
+    "mode_b": {"id": "Mode B: Analisis Ringkas (Format SubmitHub)", "en": "Mode B: Short Analysis (SubmitHub Format)"},
+    "mode_c": {"id": "Mode C: Humanization Editing Focus", "en": "Mode C: Humanization Editing Focus"},
+    "run_analysis": {"id": "Jalankan Analisis", "en": "Run Analysis"},
+    "quick_flow_title": {"id": "Alur Cepat", "en": "Quick Flow"},
+    "quick_flow_subtitle": {"id": "Urutan paling aman untuk kerja harian di dashboard ini.", "en": "The safest daily workflow inside this dashboard."},
+    "quick_flow_demo_title": {"id": "Alur Cepat Demo Online", "en": "Online Demo Quick Flow"},
+    "quick_flow_demo_subtitle": {"id": "Mode publik hanya untuk analisis audio. Fitur training dan dataset disembunyikan.", "en": "Public mode is limited to audio analysis. Training and dataset features are hidden."},
+    "workspace_tab": {"id": "Workspace", "en": "Workspace"},
+    "training_tab": {"id": "Training & Dataset", "en": "Training & Dataset"},
+    "history_tab": {"id": "History", "en": "History"},
+    "how_it_works_tab": {"id": "How It Works", "en": "How It Works"},
+    "history_panel": {"id": "History Analisis", "en": "Analysis History"},
+    "history_empty": {"id": "Belum ada history analisis.", "en": "No analysis history yet."},
+    "open": {"id": "Buka", "en": "Open"},
+    "delete": {"id": "Hapus", "en": "Delete"},
+    "train_model_title": {"id": "Train Model", "en": "Train Model"},
+    "train_model_caption": {"id": "Jalankan training ulang dari training_features.csv. Audio lama boleh dihapus setelah fiturnya tersimpan.", "en": "Retrain the model from training_features.csv. Old audio can be removed after its features are stored."},
+    "refresh_dataset_index": {"id": "Refresh Dataset Index", "en": "Refresh Dataset Index"},
+    "workspace_public_caption": {"id": "Area publik untuk upload audio, menjalankan analisis, dan membaca hasil screening secara cepat.", "en": "Public area for uploading audio, running analysis, and reading screening results quickly."},
+    "workspace_public_info": {"id": "Online demo mode aktif. Training, dataset, dan history persisten disembunyikan agar penggunaan publik tetap aman.", "en": "Online demo mode is active. Training, dataset, and persistent history are hidden to keep public usage safe."},
+    "workspace_local_caption": {"id": "Area kerja utama untuk menjalankan analisis dan melihat progres proses saat ini.", "en": "Main workspace for running analysis and viewing current progress."},
+    "online_demo_info": {"id": "Mode demo online aktif. Halaman publik ini hanya menampilkan analisis dan penjelasan. Fitur dataset, training, dan pembersihan audio tetap khusus admin/lokal.", "en": "Online demo mode is active. This public page only shows analysis and explanations. Dataset, training, and cleanup features remain admin/local only."},
+    "rendered_history_for": {"id": "Menampilkan hasil history untuk", "en": "Showing history result for"},
+    "forensic_decision": {"id": "Forensic decision", "en": "Forensic decision"},
+    "ml_prediction": {"id": "Prediksi ML", "en": "ML prediction"},
+    "headline_probabilities": {"id": "Headline probabilities", "en": "Headline probabilities"},
+    "engine": {"id": "Engine", "en": "Engine"},
+    "decision_confidence": {"id": "Keyakinan keputusan", "en": "Decision confidence"},
+    "fail_confidence": {"id": "Keyakinan untuk FAIL (AI tegas)", "en": "Confidence for FAIL (strong AI)"},
+    "headline_source_caption": {"id": "Angka di atas mengikuti basis verdict utama", "en": "The numbers above follow the main verdict basis"},
+    "detail_caption_rest": {"id": "Detail di bawah tetap menampilkan heuristik per domain dan keputusan model final.", "en": "The details below still show per-domain heuristics and the final model decision."},
+    "main_analysis_tab": {"id": "Main Analysis", "en": "Main Analysis"},
+    "ai_auditor_tab": {"id": "AI Auditor", "en": "AI Auditor"},
+    "raw_data_tab": {"id": "Raw Data (JSON)", "en": "Raw Data (JSON)"},
+    "meaning_of_result": {"id": "Arti Hasil Ini", "en": "What This Result Means"},
+    "evidence_card": {"id": "Evidence Card", "en": "Evidence Card"},
+    "fingerprint_module": {"id": "Fingerprint Module", "en": "Fingerprint Module"},
+    "generator_fingerprint": {"id": "Generator-like fingerprint", "en": "Generator-like fingerprint"},
+    "most_consistent_with": {"id": "Most consistent with", "en": "Most consistent with"},
+    "fingerprint_confidence": {"id": "Fingerprint confidence", "en": "Fingerprint confidence"},
+    "score_breakdown": {"id": "Score breakdown", "en": "Score breakdown"},
+    "detail": {"id": "Detail", "en": "Detail"},
+    "duration": {"id": "Duration", "en": "Duration"},
+    "headline_basis": {"id": "Verdict probabilities (headline basis)", "en": "Verdict probabilities (headline basis)"},
+    "source_used": {"id": "Source used", "en": "Source used"},
+    "ml_probs_detail": {"id": "ML probabilities (detail transparency)", "en": "ML probabilities (detail transparency)"},
+    "engine_used": {"id": "Engine used", "en": "Engine used"},
+    "heuristic_combined": {"id": "Heuristic combined probabilities", "en": "Heuristic combined probabilities"},
+    "heuristic_spectral": {"id": "Heuristic spectral analysis", "en": "Heuristic spectral analysis"},
+    "heuristic_temporal": {"id": "Heuristic temporal analysis", "en": "Heuristic temporal analysis"},
+}
+
+
+def get_language() -> str:
+    return st.session_state.get("ui_language", "id")
+
+
+def t(key: str) -> str:
+    lang = get_language()
+    return TRANSLATIONS.get(key, {}).get(lang, TRANSLATIONS.get(key, {}).get("id", key))
+
+
+def ui_text(value: str) -> str:
+    if not value:
+        return value
+    mapping_en = {
+        "Likely Human Audio": "Likely Human Audio",
+        "Possible AI Detected": "Possible AI Detected",
+        "AI Suspected (Review)": "AI Suspected (Review)",
+        "Likely Human (Review)": "Likely Human (Review)",
+        "Hybrid / Unclear (Review)": "Hybrid / Unclear (Review)",
+        "Hybrid Audio / Unclear": "Hybrid Audio / Unclear",
+        "PASS": "PASS",
+        "REVIEW": "REVIEW",
+        "FAIL": "FAIL",
+        "Human": "Human",
+        "Hybrid": "Hybrid",
+        "AI": "AI",
+        "Unknown generator": "Unknown generator",
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "heuristic_combined": "heuristic_combined",
+        "ml_model": "ml_model",
+        "ml-model + heuristics": "ml-model + heuristics",
+        "heuristics only": "heuristics only",
+    }
+    mapping_id = {
+        "Likely Human Audio": "Audio Cenderung Human",
+        "Possible AI Detected": "Kemungkinan AI Terdeteksi",
+        "AI Suspected (Review)": "AI Terdeteksi (Review)",
+        "Likely Human (Review)": "Cenderung Human (Review)",
+        "Hybrid / Unclear (Review)": "Hybrid / Belum Jelas (Review)",
+        "Hybrid Audio / Unclear": "Audio Hybrid / Belum Jelas",
+        "PASS": "PASS",
+        "REVIEW": "REVIEW",
+        "FAIL": "FAIL",
+        "Human": "Human",
+        "Hybrid": "Hybrid",
+        "AI": "AI",
+        "Unknown generator": "Generator tidak diketahui",
+        "low": "rendah",
+        "medium": "sedang",
+        "high": "tinggi",
+        "heuristic_combined": "gabungan_heuristik",
+        "ml_model": "model_ml",
+        "ml-model + heuristics": "model-ml + heuristik",
+        "heuristics only": "heuristik saja",
+    }
+    return mapping_en.get(value, value) if get_language() == "en" else mapping_id.get(value, value)
+
+
+def translate_generated_text(text: str) -> str:
+    if get_language() != "en" or not text:
+        return text
+
+    exact_map = {
+        "Tool ini mencoba menilai apakah audio lebih dekat ke pola Human, Hybrid, atau AI. Hasilnya sebaiknya dibaca sebagai screening assistant, bukan alat tuduhan otomatis.": "This tool tries to assess whether the audio is closer to Human, Hybrid, or AI patterns. The result should be read as a screening assistant, not as an automatic accusation tool.",
+        "Ini keputusan forensik paling aman. Artinya tidak ada kombinasi bukti kuat yang cukup untuk menuduh AI.": "This is the safest forensic decision. It means there is no strong enough combination of evidence to accuse the file of being AI.",
+        "Ini artinya file perlu dicek manual. Ada beberapa hal yang mencurigakan atau tidak stabil, tetapi bukti keras AI belum cukup.": "This means the file still needs manual review. There are suspicious or unstable signs, but strong AI evidence is still insufficient.",
+        "Ini artinya ada kombinasi bukti kuat yang cukup serius, jadi file patut dicurigai sebagai AI.": "This means there is a serious enough combination of strong evidence, so the file should be considered suspicious as AI.",
+        "Model ML paling condong membaca audio ini sebagai human.": "The ML model leans most strongly toward classifying this audio as human.",
+        "Model ML paling condong membaca audio ini sebagai campuran atau berada di area abu-abu antara human dan AI-like pattern.": "The ML model leans most strongly toward classifying this audio as mixed or within the gray area between human and AI-like patterns.",
+        "Model ML paling condong membaca audio ini sebagai AI.": "The ML model leans most strongly toward classifying this audio as AI.",
+        "Pola fingerprint generator tidak terlalu kuat.": "The generator-like fingerprint is not very strong.",
+        "Ada beberapa pola yang mirip audio generator, tetapi masih bisa tercampur dengan produksi modern.": "Some patterns resemble generator audio, but they can still overlap with modern production choices.",
+        "Ada cukup banyak pola teknis yang mirip fingerprint audio generator atau audio yang diproses sangat rapi.": "There are quite a few technical patterns that resemble generator fingerprints or extremely polished audio processing.",
+        "Tidak ada indikator AI kuat yang aktif pada empat pemeriksaan utama.": "No strong AI indicators are active across the four main checks.",
+        "Ada strong evidence yang aktif pada pemeriksaan utama.": "There is active strong evidence in the main checks.",
+        "Sebagian temuan lebih cocok dijelaskan oleh produksi modern daripada bukti AI keras.": "Some findings are better explained by modern production choices than by hard AI evidence.",
+        "Secara umum audio ini masih terbaca wajar. Sistem tidak menemukan kombinasi bukti kuat yang cukup untuk mencurigai AI.": "Overall, this audio still reads as fairly natural. The system did not find a strong enough combination of evidence to seriously suspect AI.",
+        "Ada kombinasi bukti forensik yang cukup kuat, jadi audio ini patut dicurigai sebagai AI atau proses sintetis berat.": "There is a strong enough combination of forensic evidence, so this audio should be suspected as AI or heavily synthetic processing.",
+        "Model atau aturan melihat beberapa hal yang mencurigakan, tetapi bukti kuatnya belum cukup untuk vonis keras, jadi hasilnya tetap review manual.": "The model or the rules see some suspicious signs, but the strong evidence is still insufficient for a hard verdict, so the result remains manual review.",
+        "Dinamika lagu terlalu rata atau terlalu padat.": "The song's dynamics are too flat or too dense.",
+        "Mastering / mix bus": "Mastering / mix bus",
+        "Vokal atau nada utama terdengar terlalu rapi dan terlalu stabil.": "The vocal or main melody sounds too polished and too stable.",
+        "Track vokal / pitch correction": "Vocal track / pitch correction",
+        "Ada indikator teknis yang cukup kuat dan sulit dijelaskan hanya dari mixing biasa.": "There are technical indicators strong enough that they are hard to explain as ordinary mixing alone.",
+        "Sumber audio / arrangement / render awal": "Source audio / arrangement / early render",
+        "Temuan utama lebih mirip efek mixing atau mastering modern daripada bukti AI yang keras.": "The main findings look more like modern mixing or mastering effects than hard AI evidence.",
+        "Mastering, tone shaping, dan kerapian edit": "Mastering, tone shaping, and editing polish",
+        "Belum ada masalah besar yang sangat spesifik, tetapi hasilnya masih perlu dibaca hati-hati.": "There is no single very specific major issue yet, but the result still needs to be read carefully.",
+        "Review manual pada mix, mastering, dan vokal utama": "Manual review of the mix, mastering, and lead vocal",
+    }
+    if text in exact_map:
+        return exact_map[text]
+
+    replacements = [
+        (r"Texture tiling di mel band kuat", "Strong mel-band texture tiling"),
+        (r"Texture tiling di mel band cukup jelas", "Clear mel-band texture tiling"),
+        (r"Mid band menunjukkan tiling cukup konsisten", "Mid band shows fairly consistent tiling"),
+        (r"Air band sangat konsisten antar bagian", "Air band is highly consistent across sections"),
+        (r"HF shimmer sangat stasioner", "HF shimmer is highly stationary"),
+        (r"HF shimmer cenderung stasioner", "HF shimmer appears fairly stationary"),
+        (r"Energi HF tetap kuat saat bagian quiet dibanding loud", "HF energy remains strong in quiet sections compared with loud sections"),
+        (r"HF tetap menyala mirip antara bagian quiet dan loud", "HF remains similarly active between quiet and loud sections"),
+        (r"Transient band tinggi cenderung seragam", "High-band transients appear rather uniform"),
+        (r"Frekuensi tinggi cenderung natural", "High frequencies appear natural"),
+        (r"Energi frekuensi tinggi di atas 12kHz sangat menonjol\.", "High-frequency energy above 12 kHz is very prominent."),
+        (r"Spectral entropy sangat rendah", "Spectral entropy is very low"),
+        (r"Harmonic consistency sangat tinggi dan shimmer HF sangat stasioner\.", "Harmonic consistency is extremely high and HF shimmer is very stationary."),
+        (r"Harmonic consistency sangat stabil", "Harmonic consistency is very stable"),
+        (r"Rentang dinamis lebar", "Wide dynamic range"),
+        (r"Rentang dinamis sempit", "Narrow dynamic range"),
+        (r"Dynamic range sempit .* mastering padat\.", "Narrow dynamic range can still come from dense mastering."),
+        (r"Variasi pitch sangat stabil", "Pitch variation is very stable"),
+        (r"Pitch yang terlalu stabil juga bisa disebabkan AutoTune, Melodyne, atau editing vokal berat\.", "Overly stable pitch can also be caused by AutoTune, Melodyne, or heavy vocal editing."),
+        (r"Phase coherence tinggi, tetapi indikator ini masih lemah jika berdiri sendiri\.", "Phase coherence is high, but this indicator remains weak on its own."),
+        (r"Phase coherence tinggi bisa muncul dari kompresi, denoise, atau material yang tonal\.", "High phase coherence can come from compression, denoise, or tonal material."),
+        (r"Pola 60 detik sangat repetitif dengan jitter drop kecil", "The 60-second pattern is highly repetitive with only a small jitter drop"),
+        (r"Pola 60 detik repetitif, tapi masih berubah saat dijitter\.", "The 60-second pattern is repetitive, but still changes when jitter is introduced."),
+        (r"Repetisi bagian lagu juga bisa muncul normal pada chorus, loop DAW, atau genre repetitif\.", "Song-part repetition can also appear normally in choruses, DAW loops, or repetitive genres."),
+        (r"Ada pola repetitif jangka panjang, tetapi belum cukup kuat untuk menjadi fingerprint AI\.", "There is long-range repetition, but it is not strong enough yet to count as an AI fingerprint."),
+        (r"Metadata file mengandung tag yang mengarah ke AI\.", "The file metadata contains tags that point toward AI."),
+        (r"S1: Long-range repetition sangat stabil dan tahan jitter, mirip pola tiling\.", "S1: Long-range repetition is highly stable and resists jitter, resembling tiling."),
+        (r"S1a aktif: texture tiling pada mel cukup kuat, tetapi belum ada bukti structural tiling dari chroma atau mid band\.", "S1a is active: mel texture tiling is fairly strong, but there is still no structural tiling evidence from chroma or mid band."),
+        (r"S1b aktif: ada structural tiling ringan pada chroma atau mid band, tetapi texture tiling global belum cukup kuat\.", "S1b is active: there is mild structural tiling in chroma or mid band, but global texture tiling is still not strong enough."),
+        (r"Ada repetisi jangka panjang, tetapi belum cukup kuat atau belum cukup tahan jitter untuk disebut tiling\.", "There is long-range repetition, but it is not yet strong enough or jitter-resistant enough to be called tiling."),
+        (r"S2: HF shimmer sangat stasioner dan air band terlalu konsisten antar bagian\.", "S2: HF shimmer is highly stationary and the air band is too consistent across sections."),
+        (r"S2 weak aktif: air band cukup stabil, tetapi belum didukung oleh over_0.98 ratio yang kuat atau shimmer stationarity yang cukup\.", "S2 weak is active: the air band is fairly stable, but it is not yet supported by a strong over_0.98 ratio or enough shimmer stationarity."),
+        (r"Air band cukup stabil, tetapi sendirian belum cukup kuat untuk menuduh AI\.", "The air band is fairly stable, but alone it is still not strong enough to accuse AI."),
+        (r"S3: Perilaku vokal sangat terkunci pada pitch proxy yang tersedia\.", "S3: Vocal behavior appears strongly locked according to the available pitch proxies."),
+        (r"Ada indikasi pitch vokal sangat rapi, tetapi bukti vocal synthesis belum lengkap\.", "There are signs of very tidy vocal pitch, but the evidence for vocal synthesis is still incomplete."),
+        (r"S4: Metadata file mengandung tag yang mengarah ke AI\.", "S4: The file metadata contains tags that point toward AI."),
+        (r"Energi 8-12 kHz cukup tinggi; ini bisa datang dari exciter, de-esser, hi-hat, atau sibilance\.", "Energy in the 8–12 kHz range is fairly high; this can come from exciter, de-esser, hi-hat, or sibilance."),
+        (r"Sebagian MFCC mengarah ke karakter bright/air, tetapi ini lebih cocok dibaca sebagai warna produksi\.", "Some MFCC values point toward a bright/airy character, but this is better read as production color."),
+        (r"Model ML cukup curiga ke AI, tetapi bukti forensik kuat masih belum cukup\.", "The ML model is fairly suspicious of AI, but the strong forensic evidence is still insufficient."),
+        (r"Model lebih melihat risiko hybrid karena ciri produksi modern cukup dominan\.", "The model sees more hybrid risk because modern production traits are fairly dominant."),
+        (r"Durasi di luar rentang 32-180 detik cenderung membuat analisis kurang stabil\.", "Duration outside the 32–180 second range tends to make the analysis less stable."),
+        (r"Pada durasi panjang, pola repetisi harus dibaca lebih hati-hati karena struktur lagu normal juga bisa tampak mirip antar bagian\.", "For long durations, repetition patterns must be read more carefully because normal song structure can also look similar across sections."),
+        (r"Kasus hybrid masih paling rentan tertukar dengan mixing modern atau editing vokal berat\.", "Hybrid cases remain the most vulnerable to being confused with modern mixing or heavy vocal editing."),
+        (r"Keputusan forensik saat ini adalah", "The current forensic decision is"),
+        (r"dengan verdict", "with verdict"),
+        (r"Prediksi ML paling condong ke kelas", "The ML prediction leans most toward class"),
+        (r"Strong evidence: ", "Strong evidence: "),
+        (r"Tidak ada strong evidence yang cukup untuk FAIL, tetapi fingerprint generator-like terdeteksi \(tingkat: ([^)]+)\)\.", r"There is not enough strong evidence to justify FAIL, but a generator-like fingerprint is detected (level: \1)."),
+        (r"Weak/context evidence:", "Weak/context evidence:"),
+        (r"sinyal lemah", "weak signals"),
+        (r"Produksi modern dengan kompresi berat, AutoTune, atau MIDI yang sangat rapi bisa terbaca mirip AI\.", "Heavy modern compression, AutoTune, or very tidy MIDI can read as AI-like."),
+        (r"Kurangi limiter atau kompresor yang terlalu menekan di master\.", "Reduce overly aggressive limiter or compressor settings on the master."),
+        (r"Biarkan verse dan chorus punya perbedaan energi yang lebih terasa\.", "Let the verse and chorus have a more noticeable energy difference."),
+        (r"Cek apakah loudness terlalu dipaksa rata dari awal sampai akhir\.", "Check whether the loudness has been forced too flat from beginning to end."),
+        (r"Longgarkan AutoTune atau retune speed\.", "Loosen AutoTune or retune speed."),
+        (r"Jangan ratakan semua nada secara terlalu presisi\.", "Do not flatten every note too precisely."),
+        (r"Biarkan sedikit gerakan alami pada pitch dan timing vokal\.", "Allow a little natural movement in vocal pitch and timing."),
+        (r"Bandingkan dengan stem asli atau premaster tanpa limiter\.", "Compare against the original stems or a pre-master without limiting."),
+        (r"Cek apakah ada bagian yang terlalu copy-paste atau terlalu identik antar segmen\.", "Check whether any sections feel too copy-pasted or too identical across segments."),
+        (r"Pastikan sumber vokal dan instrumen benar-benar berasal dari take atau aransemen yang berbeda\.", "Make sure the vocal and instrumental sources truly come from different takes or arrangements."),
+        (r"Kurangi brightening atau exciter berlebih di area atas\.", "Reduce excessive brightening or exciter in the upper range."),
+        (r"Cek apakah limiter, de-esser, atau denoise terlalu agresif\.", "Check whether the limiter, de-esser, or denoise is too aggressive."),
+        (r"Beri variasi kecil antar bagian agar tidak terasa terlalu seragam\.", "Add small variations across sections so they do not feel too uniform."),
+        (r"Dengarkan ulang bagian verse, chorus, dan transisi untuk mencari bagian yang terlalu seragam\.", "Listen again to the verse, chorus, and transitions to find sections that feel too uniform."),
+        (r"Bandingkan versi master dengan versi yang belum terlalu diproses jika ada\.", "Compare the master version with a less processed version if available."),
+        (r"Prioritaskan pemeriksaan dinamika, vokal utama, dan variasi antar bagian lagu\.", "Prioritize checking dynamics, the lead vocal, and variation across song sections."),
+    ]
+
+    translated = text
+    for pattern, repl in replacements:
+        translated = re.sub(pattern, repl, translated)
+    return translated
+
+
+def translate_generated_list(items: list[str]) -> list[str]:
+    return [translate_generated_text(item) for item in items]
 
 
 def plot_waveform_rms(y, sr):
@@ -397,14 +653,22 @@ def render_metric_card(label: str, value: str, hint: str = ""):
 
 def render_dashboard_header():
     inject_custom_css()
+    selector_col1, selector_col2 = st.columns([5, 1.2])
+    with selector_col2:
+        selected_language = st.selectbox(
+            t("language_label"),
+            options=["Bahasa Indonesia", "English"],
+            index=0 if get_language() == "id" else 1,
+            key="language_selector",
+        )
+        st.session_state["ui_language"] = "id" if selected_language == "Bahasa Indonesia" else "en"
     st.markdown(
-        """
+        f"""
         <div class="aa-hero">
-            <div class="aa-kicker">Audio Screening Workspace</div>
-            <div class="aa-title">Audio AI Forensics Analyzer</div>
+            <div class="aa-kicker">{t("header_kicker")}</div>
+            <div class="aa-title">{t("header_title")}</div>
             <div class="aa-subtitle">
-                Dashboard ini dipakai untuk analisis audio, evaluasi hasil forensik, penyimpanan data training,
-                dan retraining model dari feature store tanpa harus menyimpan semua file audio lama.
+                {t("header_subtitle")}
             </div>
         </div>
         """,
@@ -416,17 +680,17 @@ def render_workspace_overview():
     dataset_summary = get_dataset_summary()
     history_count = len(load_history())
     reliability_badge = "good" if MODEL_IS_RELIABLE else "warn"
-    reliability_text = "Siap dipakai" if MODEL_IS_RELIABLE else "Perlu perhatian"
+    reliability_text = t("model_ready") if MODEL_IS_RELIABLE else t("model_warn")
 
     st.markdown(
         f"""
         <div class="aa-panel">
-            <div class="aa-panel-title">Ringkasan Workspace</div>
-            <div class="aa-panel-subtitle">Status model, jumlah dataset, feature store, dan history analisis saat ini.</div>
+            <div class="aa-panel-title">{t("workspace_summary_title")}</div>
+            <div class="aa-panel-subtitle">{t("workspace_summary_subtitle")}</div>
             <div style="margin-top:0.8rem;">
                 <span class="aa-badge {reliability_badge}">Model: {reliability_text}</span>
-                <span class="aa-badge soft">Feature store: {get_feature_store_count()} baris</span>
-                <span class="aa-badge warn">History: {history_count} item</span>
+                <span class="aa-badge soft">{t("feature_store_rows")}: {get_feature_store_count()} {t("rows")}</span>
+                <span class="aa-badge warn">{t("history_items")}: {history_count} {t("items")}</span>
             </div>
         </div>
         """,
@@ -435,13 +699,13 @@ def render_workspace_overview():
 
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        render_metric_card("Total Dataset", str(dataset_summary["total"]), "Jumlah file audio yang masih ada di folder data.")
+        render_metric_card(t("total_dataset"), str(dataset_summary["total"]), t("hint_total_dataset"))
     with col2:
-        render_metric_card("Human", str(dataset_summary["human"]), "Sampel berlabel human yang masih tersimpan.")
+        render_metric_card(t("human"), str(dataset_summary["human"]), t("hint_human"))
     with col3:
-        render_metric_card("Hybrid", str(dataset_summary["hybrid"]), "Sampel berlabel hybrid yang masih tersimpan.")
+        render_metric_card(t("hybrid"), str(dataset_summary["hybrid"]), t("hint_hybrid"))
     with col4:
-        render_metric_card("AI", str(dataset_summary["ai"]), "Sampel berlabel AI yang masih tersimpan.")
+        render_metric_card(t("ai"), str(dataset_summary["ai"]), t("hint_ai"))
 
 
 def add_history_entry(report: AnalysisReport, source_name: str, source_type: str, reference_link: str):
@@ -471,16 +735,17 @@ def format_relative_time(iso_string: str) -> str:
         return iso_string
     delta = datetime.utcnow().replace(tzinfo=created.tzinfo) - created
     seconds = int(delta.total_seconds())
+    is_en = get_language() == "en"
     if seconds < 60:
-        return "baru saja"
+        return "just now" if is_en else "baru saja"
     if seconds < 3600:
         minutes = seconds // 60
-        return f"{minutes} menit lalu"
+        return f"{minutes} minutes ago" if is_en else f"{minutes} menit lalu"
     if seconds < 86400:
         hours = seconds // 3600
-        return f"{hours} jam lalu"
+        return f"{hours} hours ago" if is_en else f"{hours} jam lalu"
     days = seconds // 86400
-    return f"{days} hari lalu"
+    return f"{days} days ago" if is_en else f"{days} hari lalu"
 
 
 def sanitize_filename(filename: str) -> str:
@@ -611,8 +876,8 @@ def render_progress_block(container, percent: int, processed: int, total: int, a
         st.progress(min(max(percent, 0), 100))
         col1, col2, col3 = st.columns(3)
         col1.metric("File", f"{processed}/{total}")
-        col2.metric("Berhasil", str(added))
-        col3.metric("Skipped", str(skipped))
+        col2.metric("Success" if get_language() == "en" else "Berhasil", str(added))
+        col3.metric("Skipped" if get_language() == "en" else "Dilewati", str(skipped))
         if current_file:
             st.caption(f"{title}: `{current_file}`")
 
@@ -623,8 +888,8 @@ def render_analysis_progress(container, percent: int, step_label: str, filename:
         st.progress(min(max(percent, 0), 100))
         col1, col2 = st.columns(2)
         col1.metric("Progress", f"{percent}%")
-        col2.metric("Tahap", step_label)
-        st.caption(f"File yang diproses: `{filename}`")
+        col2.metric("Stage" if get_language() == "en" else "Tahap", step_label)
+        st.caption(f"{'Processing file' if get_language() == 'en' else 'File yang diproses'}: `{filename}`")
 
 
 def render_skipped_files(report: Optional[dict]):
@@ -636,11 +901,14 @@ def render_skipped_files(report: Optional[dict]):
     if not skipped_rows:
         return
 
-    st.warning(f"Ada {len(skipped_rows)} file yang dilewati. File ini sebaiknya dikonversi ke WAV lalu disinkron ulang.")
-    with st.expander("Daftar file yang perlu dikonversi", expanded=True):
+    if get_language() == "en":
+        st.warning(f"{len(skipped_rows)} files were skipped. These files should be converted to WAV and synced again.")
+    else:
+        st.warning(f"Ada {len(skipped_rows)} file yang dilewati. File ini sebaiknya dikonversi ke WAV lalu disinkron ulang.")
+    with st.expander("Files that should be converted" if get_language() == "en" else "Daftar file yang perlu dikonversi", expanded=True):
         for item in skipped_rows:
             st.markdown(f"- `{item.get('path', '-')}`")
-            st.caption(f"Alasan: {normalize_skip_reason(item.get('reason', ''))}")
+            st.caption(f"{'Reason' if get_language() == 'en' else 'Alasan'}: {normalize_skip_reason(item.get('reason', ''))}")
 
 
 render_dashboard_header()
@@ -648,38 +916,41 @@ render_workspace_overview()
 
 control_col, ops_col = st.columns([1.35, 0.85], gap="large")
 with control_col:
+    analysis_title = t("analysis_audio_title")
+    analysis_subtitle = t("analysis_audio_subtitle")
     st.markdown(
-        """
+        f"""
         <div class="aa-panel">
-            <div class="aa-panel-title">Analisis Audio</div>
-            <div class="aa-panel-subtitle">Upload file, pilih mode, lalu jalankan analisis dari satu tempat.</div>
+            <div class="aa-panel-title">{analysis_title}</div>
+            <div class="aa-panel-subtitle">{analysis_subtitle}</div>
         </div>
         """,
         unsafe_allow_html=True,
     )
-    uploaded_file = st.file_uploader("Upload Audio File (WAV/MP3/FLAC)", type=["wav", "mp3", "flac", "ogg"])
+    uploaded_file = st.file_uploader(t("upload_audio_label"), type=["wav", "mp3", "flac", "ogg"])
     mode = st.radio(
-        "Pilih Mode Analisis:",
-        [
-            "Mode A: Analisis Ultra-Akurat + Grafik",
-            "Mode B: Analisis Ringkas (Format SubmitHub)",
-            "Mode C: Humanization Editing Focus",
-        ],
+        t("analysis_mode_label"),
+        ["A", "B", "C"],
+        format_func=lambda value: {
+            "A": t("mode_a"),
+            "B": t("mode_b"),
+            "C": t("mode_c"),
+        }[value],
     )
-    analyze_clicked = st.button("Jalankan Analisis", disabled=uploaded_file is None, use_container_width=True)
+    analyze_clicked = st.button(t("run_analysis"), disabled=uploaded_file is None, use_container_width=True)
 
 with ops_col:
     if DEMO_MODE:
         st.markdown(
-            """
+            f"""
             <div class="aa-panel">
-                <div class="aa-panel-title">Alur Cepat Demo Online</div>
-                <div class="aa-panel-subtitle">Mode publik hanya untuk analisis audio. Fitur training dan dataset disembunyikan.</div>
+                <div class="aa-panel-title">{t("quick_flow_demo_title")}</div>
+                <div class="aa-panel-subtitle">{t("quick_flow_demo_subtitle")}</div>
                 <ol class="aa-steps">
-                    <li>Upload audio dari browser.</li>
-                    <li>Pilih mode analisis yang ingin dipakai.</li>
-                    <li>Klik <b>Jalankan Analisis</b> lalu baca hasil utamanya.</li>
-                    <li>Gunakan hasil sebagai screening assistant, bukan keputusan final otomatis.</li>
+                    <li>{'Upload audio from the browser.' if get_language() == 'en' else 'Upload audio dari browser.'}</li>
+                    <li>{'Choose the analysis mode you want to use.' if get_language() == 'en' else 'Pilih mode analisis yang ingin dipakai.'}</li>
+                    <li>{'Click <b>Run Analysis</b> and read the main result.' if get_language() == 'en' else 'Klik <b>Jalankan Analisis</b> lalu baca hasil utamanya.'}</li>
+                    <li>{'Use the result as a screening assistant, not as an automatic final decision.' if get_language() == 'en' else 'Gunakan hasil sebagai screening assistant, bukan keputusan final otomatis.'}</li>
                 </ol>
             </div>
             """,
@@ -687,16 +958,16 @@ with ops_col:
         )
     else:
         st.markdown(
-            """
+            f"""
             <div class="aa-panel">
-                <div class="aa-panel-title">Alur Cepat</div>
-                <div class="aa-panel-subtitle">Urutan paling aman untuk kerja harian di dashboard ini.</div>
+                <div class="aa-panel-title">{t("quick_flow_title")}</div>
+                <div class="aa-panel-subtitle">{t("quick_flow_subtitle")}</div>
                 <ol class="aa-steps">
-                    <li>Upload audio lalu jalankan analisis.</li>
-                    <li>Jika label file sudah yakin, simpan ke dataset yang benar.</li>
-                    <li>Sinkronkan feature store untuk mengamankan pengetahuan numerik.</li>
-                    <li>Train model dari feature store.</li>
-                    <li>Hapus audio lama yang sudah aman jika ingin merapikan folder.</li>
+                    <li>{'Upload audio and run the analysis.' if get_language() == 'en' else 'Upload audio lalu jalankan analisis.'}</li>
+                    <li>{'If the label is already confirmed, save the file to the correct dataset.' if get_language() == 'en' else 'Jika label file sudah yakin, simpan ke dataset yang benar.'}</li>
+                    <li>{'Sync the feature store to preserve numerical knowledge.' if get_language() == 'en' else 'Sinkronkan feature store untuk mengamankan pengetahuan numerik.'}</li>
+                    <li>{'Train the model from the feature store.' if get_language() == 'en' else 'Train model dari feature store.'}</li>
+                    <li>{'Delete old audio that is already safe to remove if you want to tidy the folder.' if get_language() == 'en' else 'Hapus audio lama yang sudah aman jika ingin merapikan folder.'}</li>
                 </ol>
             </div>
             """,
@@ -706,9 +977,9 @@ with ops_col:
 
 def render_history_panel():
     history_items = load_history()
-    with st.expander("History Analisis", expanded=False):
+    with st.expander(t("history_panel"), expanded=False):
         if not history_items:
-            st.caption("Belum ada history analisis.")
+            st.caption(t("history_empty"))
             return
         for entry in history_items:
             col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
@@ -723,9 +994,9 @@ def render_history_panel():
             with col3:
                 st.markdown(entry["prediction"])
             with col4:
-                if st.button("Buka", key=f"open_{entry['id']}"):
+                if st.button(t("open"), key=f"open_{entry['id']}"):
                     st.session_state["selected_history_id"] = entry["id"]
-                if st.button("Hapus", key=f"delete_{entry['id']}"):
+                if st.button(t("delete"), key=f"delete_{entry['id']}"):
                     remaining = [item for item in history_items if item["id"] != entry["id"]]
                     save_history(remaining)
                     if st.session_state.get("selected_history_id") == entry["id"]:
@@ -734,23 +1005,23 @@ def render_history_panel():
 
 
 def render_training_panel():
-    with st.expander("Train Model", expanded=False):
-        st.caption("Jalankan training ulang dari training_features.csv. Audio lama boleh dihapus setelah fiturnya tersimpan.")
-        st.caption(f"Feature store: {FEATURE_STORE_PATH.name}")
-        st.caption(f"Jumlah baris feature store saat ini: {get_feature_store_count()}")
+    with st.expander(t("train_model_title"), expanded=False):
+        st.caption(t("train_model_caption"))
+        st.caption(f"{t('feature_store_rows')}: {FEATURE_STORE_PATH.name}")
+        st.caption(f"{'Current feature store rows' if get_language() == 'en' else 'Jumlah baris feature store saat ini'}: {get_feature_store_count()}")
         top_actions_col1, top_actions_col2 = st.columns([1, 3])
         with top_actions_col1:
-            if st.button("Refresh Dataset Index", key="refresh_dataset_index_button"):
+            if st.button(t("refresh_dataset_index"), key="refresh_dataset_index_button"):
                 rebuild_dataset_csv()
-                st.success("dataset.csv berhasil disinkronkan ulang dari isi folder data.")
+                st.success("dataset.csv refreshed from the data folder." if get_language() == "en" else "dataset.csv berhasil disinkronkan ulang dari isi folder data.")
                 st.rerun()
-        st.markdown("**Langkah penggunaan:**")
-        st.markdown("1. Jika kamu masih punya audio lama di folder `data`, klik `Sinkronkan Feature Store dari Dataset Lama` sekali dulu.")
-        st.markdown("2. Setelah sinkron selesai, feature store akan menyimpan pengetahuan numerik dari file lama.")
-        st.markdown("3. Untuk file baru, analisis dulu lalu klik `Tambahkan ke Dataset Human/Hybrid/AI`.")
-        st.markdown("4. Setelah beberapa data baru masuk, klik `Train Model dari feature store`.")
-        st.markdown("5. Setelah training selesai dan feature store aman, audio lama boleh dihapus kalau memang tidak ingin disimpan.")
-        if st.button("Sinkronkan Feature Store dari Dataset Lama", key="sync_feature_store_button"):
+        st.markdown("**Usage steps:**" if get_language() == "en" else "**Langkah penggunaan:**")
+        st.markdown("1. If you still have old audio in the `data` folder, click `Sync Feature Store from Existing Dataset` once first." if get_language() == "en" else "1. Jika kamu masih punya audio lama di folder `data`, klik `Sinkronkan Feature Store dari Dataset Lama` sekali dulu.")
+        st.markdown("2. After syncing finishes, the feature store will preserve numerical knowledge from the old files." if get_language() == "en" else "2. Setelah sinkron selesai, feature store akan menyimpan pengetahuan numerik dari file lama.")
+        st.markdown("3. For new files, analyze them first, then click `Add to Human/Hybrid/AI Dataset`." if get_language() == "en" else "3. Untuk file baru, analisis dulu lalu klik `Tambahkan ke Dataset Human/Hybrid/AI`.")
+        st.markdown("4. After a few new files have been added, click `Train Model from feature store`." if get_language() == "en" else "4. Setelah beberapa data baru masuk, klik `Train Model dari feature store`.")
+        st.markdown("5. Once training is complete and the feature store is safe, old audio may be deleted if you no longer want to keep it." if get_language() == "en" else "5. Setelah training selesai dan feature store aman, audio lama boleh dihapus kalau memang tidak ingin disimpan.")
+        if st.button("Sync Feature Store from Existing Dataset" if get_language() == "en" else "Sinkronkan Feature Store dari Dataset Lama", key="sync_feature_store_button"):
             progress_container = st.empty()
             status_placeholder = st.empty()
 
@@ -769,11 +1040,11 @@ def render_training_panel():
                     added=added,
                     skipped=skipped,
                     current_file=current_file,
-                    title="Sedang diproses",
+                    title="Processing" if get_language() == "en" else "Sedang diproses",
                 )
                 if payload.get("status") == "skipped":
                     status_placeholder.caption(
-                        f"File dilewati: `{current_file}`. Alasan: {normalize_skip_reason(payload.get('reason', ''))}"
+                        f"{'Skipped file' if get_language() == 'en' else 'File dilewati'}: `{current_file}`. {'Reason' if get_language() == 'en' else 'Alasan'}: {normalize_skip_reason(payload.get('reason', ''))}"
                     )
 
             result = build_feature_store_from_dataset(
@@ -784,7 +1055,8 @@ def render_training_panel():
             save_sync_report(result)
             st.session_state["last_sync_report"] = result
             st.success(
-                f"Sinkronisasi selesai. Ditambahkan {result['rows_added']} baris fitur dari {result['rows_seen']} file dataset."
+                f"Sync complete. Added {result['rows_added']} feature rows from {result['rows_seen']} dataset files." if get_language() == "en"
+                else f"Sinkronisasi selesai. Ditambahkan {result['rows_added']} baris fitur dari {result['rows_seen']} file dataset."
             )
             render_skipped_files(result)
         latest_sync_report = st.session_state.get("last_sync_report") or load_sync_report()
@@ -794,61 +1066,87 @@ def render_training_panel():
         skipped_paths = {item.get("path", "") for item in (latest_sync_report or {}).get("rows_skipped", [])}
         skipped_unsafe_files = [path for path in unsafe_files if str(path) in skipped_paths]
 
-        st.markdown("**Pembersihan Audio Lama**")
-        st.caption("Hanya file yang sudah tercatat di feature store yang aman dihapus. File skipped tidak akan ikut dihapus.")
+        st.markdown("**Legacy Audio Cleanup**" if get_language() == "en" else "**Pembersihan Audio Lama**")
+        st.caption(
+            "Only files already recorded in the feature store are safe to delete. Skipped files will not be deleted."
+            if get_language() == "en"
+            else "Hanya file yang sudah tercatat di feature store yang aman dihapus. File skipped tidak akan ikut dihapus."
+        )
         col1, col2, col3 = st.columns(3)
-        col1.metric("Aman dihapus", str(len(safe_files)))
-        col2.metric("Belum aman", str(len(unsafe_files)))
+        col1.metric("Safe to delete" if get_language() == "en" else "Aman dihapus", str(len(safe_files)))
+        col2.metric("Not safe yet" if get_language() == "en" else "Belum aman", str(len(unsafe_files)))
         col3.metric("Skipped", str(len(skipped_unsafe_files)))
 
         if safe_files:
-            with st.expander("Lihat daftar file yang aman dihapus", expanded=False):
+            with st.expander("View files that are safe to delete" if get_language() == "en" else "Lihat daftar file yang aman dihapus", expanded=False):
                 preview_safe = safe_files[:20]
                 for path in preview_safe:
                     st.markdown(f"- `{path}`")
                 if len(safe_files) > len(preview_safe):
-                    st.caption(f"Masih ada {len(safe_files) - len(preview_safe)} file lain yang juga aman dihapus.")
+                    st.caption(
+                        f"There are still {len(safe_files) - len(preview_safe)} more files that are also safe to delete."
+                        if get_language() == "en"
+                        else f"Masih ada {len(safe_files) - len(preview_safe)} file lain yang juga aman dihapus."
+                    )
 
             confirm_delete = st.checkbox(
-                "Saya yakin ingin menghapus file audio lama yang sudah aman di feature store",
+                "I confirm that I want to delete legacy audio files that are already safe in the feature store"
+                if get_language() == "en"
+                else "Saya yakin ingin menghapus file audio lama yang sudah aman di feature store",
                 key="confirm_safe_delete",
             )
-            if st.button("Hapus Audio Lama yang Sudah Aman", key="delete_safe_audio_button", disabled=not confirm_delete):
+            if st.button("Delete Safe Legacy Audio" if get_language() == "en" else "Hapus Audio Lama yang Sudah Aman", key="delete_safe_audio_button", disabled=not confirm_delete):
                 delete_result = delete_dataset_files(safe_files)
-                st.success(f"{len(delete_result['deleted'])} file audio lama berhasil dihapus.")
+                st.success(
+                    f"{len(delete_result['deleted'])} legacy audio files were deleted successfully."
+                    if get_language() == "en"
+                    else f"{len(delete_result['deleted'])} file audio lama berhasil dihapus."
+                )
                 if delete_result["failed"]:
-                    st.warning(f"Ada {len(delete_result['failed'])} file yang gagal dihapus.")
-                    with st.expander("Detail file yang gagal dihapus", expanded=False):
+                    st.warning(
+                        f"{len(delete_result['failed'])} files could not be deleted."
+                        if get_language() == "en"
+                        else f"Ada {len(delete_result['failed'])} file yang gagal dihapus."
+                    )
+                    with st.expander("Failed deletion details" if get_language() == "en" else "Detail file yang gagal dihapus", expanded=False):
                         for item in delete_result["failed"]:
                             st.markdown(f"- `{item['path']}`")
-                            st.caption(f"Alasan: {item['reason']}")
+                            st.caption(f"{'Reason' if get_language() == 'en' else 'Alasan'}: {item['reason']}")
                 st.rerun()
         else:
-            st.caption("Belum ada file yang aman dihapus.")
+            st.caption("No files are safe to delete yet." if get_language() == "en" else "Belum ada file yang aman dihapus.")
 
         if unsafe_files:
-            with st.expander("File yang belum aman dihapus", expanded=False):
+            with st.expander("Files not safe to delete yet" if get_language() == "en" else "File yang belum aman dihapus", expanded=False):
                 preview_unsafe = unsafe_files[:20]
                 for path in preview_unsafe:
                     st.markdown(f"- `{path}`")
                 if len(unsafe_files) > len(preview_unsafe):
-                    st.caption(f"Masih ada {len(unsafe_files) - len(preview_unsafe)} file lain yang belum aman dihapus.")
+                    st.caption(
+                        f"There are still {len(unsafe_files) - len(preview_unsafe)} more files that are not safe to delete."
+                        if get_language() == "en"
+                        else f"Masih ada {len(unsafe_files) - len(preview_unsafe)} file lain yang belum aman dihapus."
+                    )
                 if skipped_unsafe_files:
-                    st.caption("Sebagian file di atas termasuk file skipped yang perlu dikonversi dulu.")
+                    st.caption(
+                        "Some of the files above were skipped and should be converted first."
+                        if get_language() == "en"
+                        else "Sebagian file di atas termasuk file skipped yang perlu dikonversi dulu."
+                    )
 
         if latest_sync_report and (latest_sync_report.get("rows_skipped") or []):
-            if st.button("Refresh Status File Skipped", key="refresh_skipped_status_button"):
+            if st.button("Refresh Skipped File Status" if get_language() == "en" else "Refresh Status File Skipped", key="refresh_skipped_status_button"):
                 refreshed_report = dict(latest_sync_report)
                 refreshed_report["rows_skipped"] = [
                     item for item in (latest_sync_report.get("rows_skipped") or []) if Path(item.get("path", "")).exists()
                 ]
                 save_sync_report(refreshed_report)
                 st.session_state["last_sync_report"] = refreshed_report
-                st.success("Status file skipped sudah diperbarui.")
+                st.success("Skipped file status has been refreshed." if get_language() == "en" else "Status file skipped sudah diperbarui.")
                 st.rerun()
 
-        if st.button("Train Model dari feature store", key="train_model_button"):
-            with st.spinner("Training model sedang berjalan..."):
+        if st.button("Train Model from feature store" if get_language() == "en" else "Train Model dari feature store", key="train_model_button"):
+            with st.spinner("Model training is running..." if get_language() == "en" else "Training model sedang berjalan..."):
                 command = [
                     sys.executable,
                     "train_model.py",
@@ -867,11 +1165,11 @@ def render_training_panel():
                     timeout=3600,
                 )
             if result.returncode == 0:
-                st.success("Training selesai. model.joblib sudah diperbarui.")
+                st.success("Training is complete. model.joblib has been updated." if get_language() == "en" else "Training selesai. model.joblib sudah diperbarui.")
                 if result.stdout.strip():
                     st.code(result.stdout.strip())
             else:
-                st.error("Training gagal dijalankan.")
+                st.error("Training failed to run." if get_language() == "en" else "Training gagal dijalankan.")
                 if result.stdout.strip():
                     st.code(result.stdout.strip())
                 if result.stderr.strip():
@@ -880,100 +1178,110 @@ def render_training_panel():
 
 def render_how_it_works_panel():
     if DEMO_MODE:
-        st.info("Mode demo online aktif. Halaman publik ini hanya menampilkan analisis dan penjelasan. Fitur dataset, training, dan pembersihan audio tetap khusus admin/lokal.")
+        st.info(t("online_demo_info"))
     st.markdown('<div class="aa-article">', unsafe_allow_html=True)
+    is_en = get_language() == "en"
+    panel_title = "How This Detector Works" if is_en else "Bagaimana Detector Ini Bekerja"
+    panel_subtitle = (
+        "An article-style explanation to help users understand how the model works, which features are read, its limitations, and how to interpret the dashboard honestly."
+        if is_en else
+        "Penjelasan versi artikel untuk memahami cara kerja model, fitur yang dibaca, keterbatasan, dan cara menafsirkan hasil dashboard dengan jujur."
+    )
+    doc_title = "Audio AI Checker: How It Works" if is_en else "Audio AI Checker: Cara Kerjanya"
+    doc_caption = (
+        "A dashboard-native documentation page written to feel like a product explainer."
+        if is_en else
+        "Versi dokumentasi di dalam dashboard, ditulis agar lebih mudah dibaca seperti halaman penjelasan produk."
+    )
+    callout_title = "Quick Reading Guide" if is_en else "Panduan Baca Cepat"
+    callout_text = (
+        "Read this page as a guide to understand the dashboard's decisions, not as a promise that the model is always right."
+        if is_en else
+        "Baca halaman ini sebagai panduan memahami keputusan dashboard, bukan sebagai janji bahwa model selalu benar."
+    )
+    info_text = (
+        "This tool tries to assess whether an audio file is closer to Human, Hybrid, or AI patterns. The output should be read as a screening assistant, not an automatic accusation tool."
+        if is_en else
+        "Tool ini mencoba menilai apakah audio lebih dekat ke pola Human, Hybrid, atau AI. Hasilnya sebaiknya dibaca sebagai screening assistant, bukan alat tuduhan otomatis."
+    )
+
+    summary_cards = [
+        (
+            "Model Core",
+            "Forensic heuristics + calibrated LogisticRegression." if is_en else "Heuristik forensik + LogisticRegression terkalibrasi.",
+        ),
+        (
+            "Decision Style",
+            "Conservative. The model may suspect AI, but FAIL still needs strong evidence." if is_en else "Konservatif. Model boleh curiga, tetapi FAIL butuh bukti kuat.",
+        ),
+        (
+            "Training Data",
+            "Learns from a feature store so older knowledge is preserved." if is_en else "Belajar dari feature store agar pengetahuan lama tidak hilang.",
+        ),
+        (
+            "Best Use",
+            "Early screening, manual review, and dataset growth." if is_en else "Screening awal, audit manual, dan pengayaan dataset.",
+        ),
+    ]
+
     st.markdown(
-        """
+        f"""
         <div class="aa-panel">
-            <div class="aa-panel-title">How This Detector Works</div>
-            <div class="aa-panel-subtitle">
-                Penjelasan versi artikel untuk memahami cara kerja model, fitur yang dibaca, keterbatasan, dan cara
-                menafsirkan hasil dashboard dengan jujur.
-            </div>
+            <div class="aa-panel-title">{panel_title}</div>
+            <div class="aa-panel-subtitle">{panel_subtitle}</div>
         </div>
         """,
         unsafe_allow_html=True,
     )
-
-    st.markdown("### Audio AI Checker: How It Works")
-    st.caption("Versi dokumentasi di dalam dashboard, ditulis agar lebih mudah dibaca seperti halaman penjelasan produk.")
-
+    st.markdown(f"### {doc_title}")
+    st.caption(doc_caption)
     st.markdown(
-        """
+        f"""
         <div class="aa-callout">
-            <div class="aa-callout-title">Quick Reading Guide</div>
-            <div>
-                <strong>ID:</strong> Baca halaman ini sebagai panduan memahami keputusan dashboard, bukan sebagai janji bahwa model selalu benar.
-                <br/>
-                <strong>EN:</strong> Read this page as a guide to understand the dashboard's decisions, not as a promise that the model is always right.
-            </div>
+            <div class="aa-callout-title">{callout_title}</div>
+            <div>{callout_text}</div>
         </div>
         """,
         unsafe_allow_html=True,
     )
+    cards_html = "".join(
+        f"""
+        <div class="aa-summary-card">
+            <div class="aa-summary-card-title">{title}</div>
+            <p>{body}</p>
+        </div>
+        """
+        for title, body in summary_cards
+    )
+    st.markdown(f'<div class="aa-summary-grid">{cards_html}</div>', unsafe_allow_html=True)
+    st.info(info_text)
 
+    st.markdown("### How the Model Works" if is_en else "### Bagaimana Model Bekerja")
+    st.write(
+        "The engine uses two layers: first, forensic heuristics based on audio features; second, an ML layer that reads the overall feature pattern. The current ML model is a calibrated `LogisticRegression`, not a large neural network."
+        if is_en else
+        "Engine utama saat ini memakai kombinasi dua lapis: pertama, pembacaan heuristik forensik berbasis fitur audio; kedua, model ML untuk membaca pola fitur secara lebih global. Model ML yang dipakai sekarang adalah `LogisticRegression` yang dikalibrasi probabilitasnya, jadi bukan neural network besar."
+    )
+    st.write(
+        "That is why the dashboard shows both `Forensic decision` for the conservative screening call and `Prediksi ML` for the model tendency."
+        if is_en else
+        "Karena itu, dashboard menampilkan dua sudut pandang sekaligus: `Forensic decision` untuk keputusan screening yang konservatif, dan `Prediksi ML` untuk melihat kecenderungan model."
+    )
+
+    st.markdown("### Training Process" if is_en else "### Proses Training")
+    st.write(
+        "The model is trained from labeled `human`, `hybrid`, and `ai` audio. Each file is converted into numerical features first, and those features are stored in `training_features.csv` so older learning can survive even if raw audio is cleaned up later."
+        if is_en else
+        "Model dilatih dari kumpulan audio berlabel `human`, `hybrid`, dan `ai`. Setiap file tidak langsung dipelajari sebagai waveform mentah, tetapi diubah dulu menjadi kumpulan angka fitur. Kumpulan fitur ini disimpan di `training_features.csv`, sehingga pengetahuan numerik lama bisa dipertahankan walaupun audio mentahnya nanti dibersihkan dari folder dataset."
+    )
     st.markdown(
         """
-        <div class="aa-summary-grid">
-            <div class="aa-summary-card">
-                <div class="aa-summary-card-title">Model Core</div>
-                <p><strong>ID:</strong> Heuristik forensik + LogisticRegression terkalibrasi.</p>
-                <p><strong>EN:</strong> Forensic heuristics + calibrated LogisticRegression.</p>
-            </div>
-            <div class="aa-summary-card">
-                <div class="aa-summary-card-title">Decision Style</div>
-                <p><strong>ID:</strong> Konservatif. Model boleh curiga, tetapi FAIL butuh bukti kuat.</p>
-                <p><strong>EN:</strong> Conservative. The model may suspect AI, but FAIL still needs strong evidence.</p>
-            </div>
-            <div class="aa-summary-card">
-                <div class="aa-summary-card-title">Training Data</div>
-                <p><strong>ID:</strong> Belajar dari feature store agar pengetahuan lama tidak hilang.</p>
-                <p><strong>EN:</strong> Learns from a feature store so older knowledge is preserved.</p>
-            </div>
-            <div class="aa-summary-card">
-                <div class="aa-summary-card-title">Best Use</div>
-                <p><strong>ID:</strong> Screening awal, audit manual, dan pengayaan dataset.</p>
-                <p><strong>EN:</strong> Early screening, manual review, and dataset growth.</p>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    st.info(
-        "Tool ini mencoba menilai apakah audio lebih dekat ke pola Human, Hybrid, atau AI. "
-        "Hasilnya sebaiknya dibaca sebagai screening assistant, bukan alat tuduhan otomatis."
-    )
-
-    st.markdown("### Bagaimana Model Bekerja")
-    st.write(
-        "Engine utama saat ini memakai kombinasi dua lapis: "
-        "pertama, pembacaan heuristik forensik berbasis fitur audio; kedua, model ML untuk membaca pola fitur secara lebih global. "
-        "Model ML yang dipakai sekarang adalah `LogisticRegression` yang dikalibrasi probabilitasnya, jadi bukan neural network besar."
-    )
-    st.caption(
-        "EN: The engine uses two layers: forensic heuristics first, then an ML layer that reads the overall feature pattern. "
-        "The current ML model is a calibrated `LogisticRegression`, not a large neural network."
-    )
-    st.write(
-        "Karena itu, dashboard menampilkan dua sudut pandang sekaligus: "
-        "`Forensic decision` untuk keputusan screening yang konservatif, dan `Prediksi ML` untuk melihat kecenderungan model."
-    )
-    st.caption(
-        "EN: That is why the dashboard shows both `Forensic decision` for the conservative screening call and `Prediksi ML` for the model tendency."
-    )
-
-    st.markdown("### Training Process")
-    st.write(
-        "Model dilatih dari kumpulan audio berlabel `human`, `hybrid`, dan `ai`. "
-        "Setiap file tidak langsung dipelajari sebagai waveform mentah, tetapi diubah dulu menjadi kumpulan angka fitur. "
-        "Kumpulan fitur ini disimpan di `training_features.csv`, sehingga pengetahuan numerik lama bisa dipertahankan walaupun audio mentahnya nanti dibersihkan dari folder dataset."
-    )
-    st.caption(
-        "EN: The model is trained from labeled `human`, `hybrid`, and `ai` audio. Each file is converted into numerical features first, "
-        "and those features are stored in `training_features.csv` so older learning can survive even if raw audio is cleaned up later."
-    )
-    st.markdown(
+        - Audio files are labeled through the dashboard.
+        - Numerical features are saved into the feature store.
+        - Retraining reads the feature store instead of requiring legacy raw audio.
+        - Training outputs are saved into `model.joblib`.
+        """
+        if is_en else
         """
         - File audio diberi label yang benar melalui dashboard.
         - Fitur numerik disimpan ke feature store.
@@ -982,10 +1290,24 @@ def render_how_it_works_panel():
         """
     )
 
-    st.markdown("### Feature Analysis")
-    st.write("Detector ini membaca beberapa kelompok fitur utama:")
-    st.caption("EN: The detector reads several main feature groups.")
+    st.markdown("### Feature Analysis" if is_en else "### Analisis Fitur")
+    st.write(
+        "The detector reads several main feature groups:"
+        if is_en else
+        "Detector ini membaca beberapa kelompok fitur utama:"
+    )
     st.markdown(
+        """
+        1. **Basic Spectral Features**
+           Reads spectrum texture, loudness, centroid, flatness, entropy, rolloff, and MFCC.
+        2. **Harmonic & Vocal Proxies**
+           Reads harmonic stability, phase coherence, pitch transition, and vocal-vs-music proxy ratios.
+        3. **Long-Range Pattern Analysis**
+           Reads repetition and similarity across 60-second, 120-second, and 180-second windows.
+        4. **Fingerprint Signals**
+           Looks for generator-like patterns such as texture tiling, air-band stability, and HF shimmer behavior.
+        """
+        if is_en else
         """
         1. **Basic Spectral Features**
            Melihat tekstur spektrum, loudness, centroid, flatness, entropy, rolloff, dan MFCC.
@@ -998,27 +1320,36 @@ def render_how_it_works_panel():
         """
     )
 
-    st.markdown("### Cara Membaca Hasil")
+    st.markdown("### How to Read the Result" if is_en else "### Cara Membaca Hasil")
     st.markdown(
+        """
+        - **PASS**: no strong evidence is currently serious enough to accuse the file of being AI.
+        - **REVIEW**: something still needs manual checking, but strong AI evidence is not complete yet.
+        - **FAIL**: the combination of strong evidence is serious enough that the file should be considered suspicious.
+        """
+        if is_en else
         """
         - **PASS**: belum ada strong evidence yang cukup untuk menuduh AI.
         - **REVIEW**: ada hal yang perlu dicek manual, tapi bukti keras AI belum cukup.
         - **FAIL**: kombinasi bukti kuat sudah cukup serius dan audio patut dicurigai.
         """
     )
-    st.caption(
-        "EN: `PASS` means no strong evidence is present, `REVIEW` means manual checking is still needed, and `FAIL` means the strong evidence is serious enough to suspect AI."
-    )
     st.write(
-        "Kalau `Prediksi ML` tinggi ke AI tetapi `Forensic decision` masih `REVIEW`, itu berarti model curiga, "
-        "namun bukti forensik kuatnya belum lengkap. Ini dibuat sengaja supaya dashboard lebih jujur dan tidak terlalu agresif."
-    )
-    st.caption(
-        "EN: If the ML prediction leans strongly toward AI but the forensic decision is still `REVIEW`, the model is suspicious but the strong forensic evidence is still incomplete."
+        "If `Prediksi ML` leans toward AI while the `Forensic decision` stays at `REVIEW`, it means the model is suspicious but the strong forensic evidence is still incomplete. This is intentional so the dashboard stays honest and not overly aggressive."
+        if is_en else
+        "Kalau `Prediksi ML` tinggi ke AI tetapi `Forensic decision` masih `REVIEW`, itu berarti model curiga, namun bukti forensik kuatnya belum lengkap. Ini dibuat sengaja supaya dashboard lebih jujur dan tidak terlalu agresif."
     )
 
-    st.markdown("### Limitations and Considerations")
+    st.markdown("### Limitations and Considerations" if is_en else "### Keterbatasan dan Pertimbangan")
     st.markdown(
+        """
+        - Very long audio can make repetition patterns look stronger than they really are.
+        - Modern production with heavy mastering, strong AutoTune, or very polished textures can look AI-like.
+        - Instrumental songs or tracks with limited vocals make some vocal metrics less informative.
+        - This model learns from a local dataset that keeps evolving, so label quality matters a lot.
+        - Generator archetypes remain probabilistic and often end up as `Unknown generator`.
+        """
+        if is_en else
         """
         - Durasi audio yang sangat panjang bisa membuat pola repetisi terlihat lebih kuat dari yang sebenarnya.
         - Produksi modern dengan mastering padat, AutoTune berat, atau tekstur yang sangat rapi bisa terbaca mirip AI.
@@ -1027,12 +1358,16 @@ def render_how_it_works_panel():
         - Hasil `archetype` generator tetap probabilistik dan sering wajar berakhir di `Unknown generator`.
         """
     )
-    st.caption(
-        "EN: Long audio, modern polished production, limited vocals, and dataset quality all affect reliability. Generator archetypes are still probabilistic and often remain `Unknown generator`."
-    )
 
-    st.markdown("### Next Steps")
+    st.markdown("### Next Steps" if is_en else "### Langkah Berikutnya")
     st.markdown(
+        """
+        - Add a cleaner and more balanced dataset.
+        - Improve plain-language explanations so non-technical users understand results faster.
+        - Add richer training progress visuals and stronger dataset audits.
+        - Improve the fingerprint module so weak evidence, strong evidence, and headline verdicts stay more consistent.
+        """
+        if is_en else
         """
         - Menambah dataset yang lebih seimbang dan lebih bersih.
         - Memperkuat penjelasan awam agar user non-teknis lebih cepat paham.
@@ -1040,104 +1375,134 @@ def render_how_it_works_panel():
         - Mengembangkan fingerprint module agar semakin konsisten antara weak evidence, strong evidence, dan headline verdict.
         """
     )
-    st.caption(
-        "EN: Next improvements include a cleaner balanced dataset, clearer non-technical explanations, richer training visuals, and a more consistent fingerprint module."
-    )
     st.markdown("</div>", unsafe_allow_html=True)
 
 
 def render_report(report: AnalysisReport, mode: str, y=None, sr=None, history_entry=None):
     st.divider()
+    executive_summary_text = translate_generated_text(report.executive_summary)
+    simple_explanation_text = translate_generated_text(report.simple_explanation)
+    main_issue_text = translate_generated_text(report.main_issue)
+    fix_area_text = translate_generated_text(report.fix_area)
+    practical_steps = translate_generated_list(report.practical_steps)
+    strong_red_flags = translate_generated_list(report.strong_red_flags)
+    weak_indicators = translate_generated_list(report.weak_indicators)
+    production_mimic_indicators = translate_generated_list(report.production_mimic_indicators)
+    fingerprint_summary_text = translate_generated_text(report.fingerprint_summary)
+    fingerprint_signals = translate_generated_list(report.fingerprint_signals)
+    limitations_warnings = translate_generated_list(report.limitations_warnings)
+    humanization_guide = translate_generated_list(report.humanization_guide)
+    verdict_confidence_reason = translate_generated_text(report.verdict_confidence_reason)
+    decision_hint_text = translate_generated_text(report.decision_hint)
+    ai_verdict_confidence_reason = translate_generated_text(report.ai_verdict_confidence_reason)
+    fail_hint_text = translate_generated_text(report.fail_hint)
+    fingerprint_confidence_reason = translate_generated_text(report.fingerprint_confidence_reason)
     if history_entry is not None:
         st.info(
-            f"Menampilkan hasil history untuk `{history_entry['source_name']}` dari {format_relative_time(history_entry['created_at'])}."
+            f"{t('rendered_history_for')} `{history_entry['source_name']}` {('from' if get_language() == 'en' else 'dari')} {format_relative_time(history_entry['created_at'])}."
         )
         if history_entry.get("reference_link"):
-            st.caption(f"Link referensi: {history_entry['reference_link']}")
+            st.caption(f"{'Reference link' if get_language() == 'en' else 'Link referensi'}: {history_entry['reference_link']}")
 
     with st.container(border=True):
-        st.markdown(f"### {report.overall_verdict}")
-        st.caption(f"Forensic decision: {report.screening_outcome}")
-        st.caption(f"Prediksi ML: {report.model_label}")
+        st.markdown(f"### {ui_text(report.overall_verdict)}")
+        st.caption(f"{t('forensic_decision')}: {ui_text(report.screening_outcome)}")
+        st.caption(f"{t('ml_prediction')}: {ui_text(report.model_label)}")
         st.caption(
-            f"Headline probabilities: Human {report.headline_probabilities.human}% | "
-            f"Hybrid {report.headline_probabilities.hybrid}% | "
+            f"{t('headline_probabilities')}: {t('human')} {report.headline_probabilities.human}% | "
+            f"{t('hybrid')} {report.headline_probabilities.hybrid}% | "
             f"AI {report.headline_probabilities.ai}%"
         )
-        st.caption(f"Engine: {report.analysis_engine}")
-        st.caption(f"Keyakinan keputusan ({report.screening_outcome}): {report.verdict_confidence_label}")
-        if report.verdict_confidence_reason:
-            st.caption(report.verdict_confidence_reason)
-        if report.decision_hint:
-            st.caption(report.decision_hint)
-        st.caption(f"Keyakinan untuk FAIL (AI tegas): {report.ai_verdict_confidence_label}")
-        if report.ai_verdict_confidence_reason:
-            st.caption(report.ai_verdict_confidence_reason)
-        if report.fail_hint:
-            st.caption(report.fail_hint)
-        st.markdown(report.executive_summary)
+        st.caption(f"{t('engine')}: {ui_text(report.analysis_engine)}")
+        st.caption(f"{t('decision_confidence')} ({ui_text(report.screening_outcome)}): {ui_text(report.verdict_confidence_label)}")
+        if verdict_confidence_reason:
+            st.caption(verdict_confidence_reason)
+        if decision_hint_text:
+            st.caption(decision_hint_text)
+        st.caption(f"{t('fail_confidence')}: {ui_text(report.ai_verdict_confidence_label)}")
+        if ai_verdict_confidence_reason:
+            st.caption(ai_verdict_confidence_reason)
+        if fail_hint_text:
+            st.caption(fail_hint_text)
+        st.markdown(executive_summary_text)
         c1, c2, c3 = st.columns(3)
-        c1.metric("Human", f"{report.headline_probabilities.human}%")
-        c2.metric("Hybrid", f"{report.headline_probabilities.hybrid}%")
-        c3.metric("Pure AI", f"{report.headline_probabilities.ai}%")
+        c1.metric(t("human"), f"{report.headline_probabilities.human}%")
+        c2.metric(t("hybrid"), f"{report.headline_probabilities.hybrid}%")
+        c3.metric(t("pure_ai"), f"{report.headline_probabilities.ai}%")
         st.caption(
-            f"Angka di atas mengikuti basis verdict utama ({report.headline_probability_source}). "
-            "Detail di bawah tetap menampilkan heuristik per domain dan keputusan model final."
+            f"{t('headline_source_caption')} ({report.headline_probability_source}). "
+            f"{t('detail_caption_rest')}"
         )
 
     # Create tabs for structured view
-    tab_forensic, tab_ai_expert, tab_raw_data = st.tabs(["📊 Analisa Utama", "🤖 AI Auditor", "🛠️ Raw Data (JSON)"])
+    tab_forensic, tab_ai_expert, tab_raw_data = st.tabs([t("main_analysis_tab"), t("ai_auditor_tab"), t("raw_data_tab")])
 
     with tab_forensic:
         with st.container(border=True):
-            st.markdown("### Arti Hasil Ini")
+            st.markdown(f"### {t('meaning_of_result')}")
+            is_en = get_language() == "en"
             title_explanations = {
-                "Likely Human Audio": "Judul ini berarti sistem tidak menemukan bukti kuat yang cukup untuk mencurigai AI.",
-                "Possible AI Detected": "Judul ini berarti ada kombinasi bukti forensik yang cukup kuat sehingga audio patut dicurigai sebagai AI atau proses sintetis berat.",
-                "AI Suspected (Review)": "Judul ini berarti model cukup curiga ke AI, tetapi keputusan akhirnya tetap review karena bukti forensik kuatnya belum lengkap.",
-                "Likely Human (Review)": "Judul ini berarti audio cenderung human, tetapi masih ada konteks yang membuat sistem memilih review manual.",
-                "Hybrid / Unclear (Review)": "Judul ini berarti hasilnya masih campuran atau belum cukup jelas, jadi sistem memilih review manual.",
+                "Likely Human Audio": "This title means the system did not find strong enough evidence to seriously suspect AI." if is_en else "Judul ini berarti sistem tidak menemukan bukti kuat yang cukup untuk mencurigai AI.",
+                "Possible AI Detected": "This title means there is a strong enough combination of forensic evidence to suspect AI or heavy synthetic processing." if is_en else "Judul ini berarti ada kombinasi bukti forensik yang cukup kuat sehingga audio patut dicurigai sebagai AI atau proses sintetis berat.",
+                "AI Suspected (Review)": "This title means the model is fairly suspicious of AI, but the final decision remains review because strong forensic evidence is still incomplete." if is_en else "Judul ini berarti model cukup curiga ke AI, tetapi keputusan akhirnya tetap review karena bukti forensik kuatnya belum lengkap.",
+                "Likely Human (Review)": "This title means the audio leans human, but there is still enough context for the system to choose manual review." if is_en else "Judul ini berarti audio cenderung human, tetapi masih ada konteks yang membuat sistem memilih review manual.",
+                "Hybrid / Unclear (Review)": "This title means the result is still mixed or not yet clear enough, so the system chooses manual review." if is_en else "Judul ini berarti hasilnya masih campuran atau belum cukup jelas, jadi sistem memilih review manual.",
             }
             forensic_explanations = {
-                "PASS": "Ini keputusan forensik paling aman. Artinya tidak ada kombinasi bukti kuat yang cukup untuk menuduh AI.",
-                "REVIEW": "Ini artinya file perlu dicek manual. Ada beberapa hal yang mencurigakan atau tidak stabil, tetapi bukti keras AI belum cukup.",
-                "FAIL": "Ini artinya ada kombinasi bukti kuat yang cukup serius, jadi file patut dicurigai sebagai AI.",
+                "PASS": "This is the safest forensic decision. It means there is no strong enough combination of evidence to accuse AI." if is_en else "Ini keputusan forensik paling aman. Artinya tidak ada kombinasi bukti kuat yang cukup untuk menuduh AI.",
+                "REVIEW": "This means the file still needs manual checking. There are suspicious or unstable signs, but hard AI evidence is still insufficient." if is_en else "Ini artinya file perlu dicek manual. Ada beberapa hal yang mencurigakan atau tidak stabil, tetapi bukti keras AI belum cukup.",
+                "FAIL": "This means the combination of strong evidence is serious enough that the file should be suspected as AI." if is_en else "Ini artinya ada kombinasi bukti kuat yang cukup serius, jadi file patut dicurigai sebagai AI.",
             }
             model_explanations = {
-                "Human": "Model ML paling condong membaca audio ini sebagai human.",
-                "Hybrid": "Model ML paling condong membaca audio ini sebagai campuran atau berada di area abu-abu antara human dan AI-like pattern.",
-                "AI": "Model ML paling condong membaca audio ini sebagai AI.",
+                "Human": "The ML model leans most strongly toward reading this audio as human." if is_en else "Model ML paling condong membaca audio ini sebagai human.",
+                "Hybrid": "The ML model leans most strongly toward reading this audio as mixed or in the gray area between human and AI-like patterns." if is_en else "Model ML paling condong membaca audio ini sebagai campuran atau berada di area abu-abu antara human dan AI-like pattern.",
+                "AI": "The ML model leans most strongly toward reading this audio as AI." if is_en else "Model ML paling condong membaca audio ini sebagai AI.",
             }
             fingerprint_explanations = {
-                "Low": "Pola fingerprint generator tidak terlalu kuat.",
-                "Medium": "Ada beberapa pola yang mirip audio generator, tetapi masih bisa tercampur dengan produksi modern.",
-                "High": "Ada cukup banyak pola teknis yang mirip fingerprint audio generator atau audio yang diproses sangat rapi.",
+                "Low": "The generator-like fingerprint is not very strong." if is_en else "Pola fingerprint generator tidak terlalu kuat.",
+                "Medium": "Some patterns resemble generator audio, but they can still overlap with modern production choices." if is_en else "Ada beberapa pola yang mirip audio generator, tetapi masih bisa tercampur dengan produksi modern.",
+                "High": "There are quite a few technical patterns that resemble generator fingerprints or extremely polished audio processing." if is_en else "Ada cukup banyak pola teknis yang mirip fingerprint audio generator atau audio yang diproses sangat rapi.",
             }
 
-            st.markdown(f"- **Title:** {title_explanations.get(report.overall_verdict, 'Judul ini adalah ringkasan singkat dari pembacaan akhir sistem.')}")
-            st.markdown(f"- **Forensic decision:** {forensic_explanations.get(report.screening_outcome, 'Ini adalah keputusan forensik utama sistem.')}")
-            st.markdown(f"- **Prediksi ML:** {model_explanations.get(report.model_label, 'Ini adalah kelas yang paling dipilih oleh model ML.')}")
+            st.markdown(f"- **{'Title' if is_en else 'Judul'}:** {title_explanations.get(report.overall_verdict, 'This title is a short summary of the final system reading.' if is_en else 'Judul ini adalah ringkasan singkat dari pembacaan akhir sistem.')}")
+            st.markdown(f"- **{t('forensic_decision')}:** {forensic_explanations.get(report.screening_outcome, 'This is the main forensic decision of the system.' if is_en else 'Ini adalah keputusan forensik utama sistem.')}")
+            st.markdown(f"- **{t('ml_prediction')}:** {model_explanations.get(report.model_label, 'This is the class most favored by the ML model.' if is_en else 'Ini adalah kelas yang paling dipilih oleh model ML.')}")
             st.markdown(
-                f"- **Verdict probabilities:** Ini menunjukkan pembagian skor yang dipakai untuk judul dan keputusan utama: "
-                f"Human {report.headline_probabilities.human}%, "
-                f"Hybrid {report.headline_probabilities.hybrid}%, "
-                f"AI {report.headline_probabilities.ai}%. "
-                f"Di kasus ini angka headline memakai basis `{report.headline_probability_source}`. "
-                "Detail di bawah tetap menampilkan probabilitas ML dan heuristik per domain."
+                f"- **{t('headline_probabilities')}:** "
+                + (
+                    f"This shows the score split used for the title and main decision: Human {report.headline_probabilities.human}%, Hybrid {report.headline_probabilities.hybrid}%, AI {report.headline_probabilities.ai}%. In this case the headline numbers use `{report.headline_probability_source}` as the basis. The details below still show ML probabilities and per-domain heuristics."
+                    if is_en
+                    else f"Ini menunjukkan pembagian skor yang dipakai untuk judul dan keputusan utama: Human {report.headline_probabilities.human}%, Hybrid {report.headline_probabilities.hybrid}%, AI {report.headline_probabilities.ai}%. Di kasus ini angka headline memakai basis `{report.headline_probability_source}`. Detail di bawah tetap menampilkan probabilitas ML dan heuristik per domain."
+                )
             )
             st.markdown(
-                f"- **Keyakinan keputusan:** Ini menunjukkan seberapa yakin sistem terhadap keputusan `{report.screening_outcome}`. "
-                "Ini bukan berarti sistem yakin file ini pasti AI."
+                f"- **{t('decision_confidence')}:** "
+                + (
+                    f"This shows how confident the system is about the `{report.screening_outcome}` decision. It does not mean the system is certain the file is AI."
+                    if is_en
+                    else f"Ini menunjukkan seberapa yakin sistem terhadap keputusan `{report.screening_outcome}`. Ini bukan berarti sistem yakin file ini pasti AI."
+                )
             )
-            st.markdown("- **Keyakinan untuk FAIL (AI tegas):** Ini menunjukkan apakah bukti yang ada sudah cukup kuat untuk naik ke keputusan `FAIL`.")
-            st.markdown(f"- **Fingerprint:** {fingerprint_explanations.get(report.fingerprint_level, 'Ini menunjukkan seberapa kuat pola generator-like yang terlihat.')}")
             st.markdown(
-                f"- **Archetype:** Jika ada pola generator-like, sistem menilai file ini paling dekat ke `{report.fingerprint_archetype}`. "
-                "Kalau tertulis `Unknown generator`, artinya pola itu belum cukup khas untuk diarahkan ke tipe generator tertentu."
+                f"- **{t('fail_confidence')}:** "
+                + (
+                    "This shows whether the available evidence is already strong enough to escalate to `FAIL`."
+                    if is_en
+                    else "Ini menunjukkan apakah bukti yang ada sudah cukup kuat untuk naik ke keputusan `FAIL`."
+                )
+            )
+            st.markdown(f"- **{'Fingerprint' if is_en else 'Fingerprint'}:** {fingerprint_explanations.get(report.fingerprint_level, 'This shows how strong the visible generator-like pattern is.' if is_en else 'Ini menunjukkan seberapa kuat pola generator-like yang terlihat.')}")
+            st.markdown(
+                f"- **{'Archetype' if is_en else 'Arketipe'}:** "
+                + (
+                    f"If a generator-like pattern exists, the system judges this file to be closest to `{report.fingerprint_archetype}`. If it says `Unknown generator`, the pattern is not distinctive enough to point to a specific generator type."
+                    if is_en
+                    else f"Jika ada pola generator-like, sistem menilai file ini paling dekat ke `{report.fingerprint_archetype}`. Kalau tertulis `Unknown generator`, artinya pola itu belum cukup khas untuk diarahkan ke tipe generator tertentu."
+                )
             )
 
         with st.container(border=True):
-            st.markdown("### Evidence Card")
+            st.markdown(f"### {t('evidence_card')}")
             indicator_labels = {
                 "S1a_texture_tiling": "S1a Texture tiling (mel)",
                 "S1b_structural_tiling": "S1b Structural tiling (chroma/mid)",
@@ -1148,87 +1513,87 @@ def render_report(report: AnalysisReport, mode: str, y=None, sr=None, history_en
                 "S4_metadata_ai": "S4 Metadata AI eksplisit",
             }
             for key, active in report.strong_indicator_status.items():
-                status = "Ya" if active else "Tidak"
+                status = ("Yes" if active else "No") if get_language() == "en" else ("Ya" if active else "Tidak")
                 st.markdown(f"- **{indicator_labels.get(key, key)}:** {status}")
 
-            if report.strong_red_flags:
-                st.markdown("**Strong indicators:**")
-                for item in report.strong_red_flags:
+            if strong_red_flags:
+                st.markdown("**Strong indicators:**" if get_language() == "en" else "**Indikator kuat:**")
+                for item in strong_red_flags:
                     st.error(item)
-            if report.weak_indicators:
-                st.markdown("**Weak indicators:**")
-                for item in report.weak_indicators:
+            if weak_indicators:
+                st.markdown("**Weak indicators:**" if get_language() == "en" else "**Indikator lemah:**")
+                for item in weak_indicators:
                     st.warning(item)
-            if report.production_mimic_indicators:
-                st.markdown("**Production-mimic indicators:**")
-                for item in report.production_mimic_indicators:
+            if production_mimic_indicators:
+                st.markdown("**Production-mimic indicators:**" if get_language() == "en" else "**Indikator mirip produksi modern:**")
+                for item in production_mimic_indicators:
                     st.info(item)
 
         with st.container(border=True):
-            st.markdown("### Fingerprint Module")
-            st.markdown(f"**Generator-like fingerprint:** {report.fingerprint_level} ({report.fingerprint_score}/100)")
-            st.markdown(f"**Most consistent with:** {report.fingerprint_archetype}")
-            st.markdown(f"**Fingerprint confidence:** {report.fingerprint_confidence_label}")
-            if report.fingerprint_confidence_reason:
-                st.caption(report.fingerprint_confidence_reason)
-            st.write(report.fingerprint_summary)
-            if report.fingerprint_signals:
-                for item in report.fingerprint_signals:
+            st.markdown(f"### {t('fingerprint_module')}")
+            st.markdown(f"**{t('generator_fingerprint')}:** {ui_text(report.fingerprint_level)} ({report.fingerprint_score}/100)")
+            st.markdown(f"**{t('most_consistent_with')}:** {ui_text(report.fingerprint_archetype)}")
+            st.markdown(f"**{t('fingerprint_confidence')}:** {ui_text(report.fingerprint_confidence_label)}")
+            if fingerprint_confidence_reason:
+                st.caption(fingerprint_confidence_reason)
+            st.write(fingerprint_summary_text)
+            if fingerprint_signals:
+                for item in fingerprint_signals:
                     st.markdown(f"- {item}")
             if report.fingerprint_score_components:
-                st.markdown("**Score breakdown:**")
+                st.markdown(f"**{t('score_breakdown')}:**")
                 for key, value in report.fingerprint_score_components.items():
                     st.markdown(f"- `{key}`: `{value}`")
             if report.fingerprint_metrics:
-                st.markdown("**Metrik pemicu fingerprint:**")
+                st.markdown("**Fingerprint trigger metrics:**" if get_language() == "en" else "**Metrik pemicu fingerprint:**")
                 for key, value in report.fingerprint_metrics.items():
                     st.markdown(f"- `{key}`: `{value}`")
 
         with st.container(border=True):
-            st.markdown("### Bahasa Sederhana")
-            st.write(report.simple_explanation)
-            st.markdown(f"**Masalah utama:** {report.main_issue}")
-            st.markdown(f"**Perbaiki di bagian:** {report.fix_area}")
-            st.markdown("**Langkah praktis:**")
-            for step in report.practical_steps:
+            st.markdown("### Plain-language Explanation" if get_language() == "en" else "### Bahasa Sederhana")
+            st.write(simple_explanation_text)
+            st.markdown(f"**{'Main issue' if get_language() == 'en' else 'Masalah utama'}:** {main_issue_text}")
+            st.markdown(f"**{'Fix area' if get_language() == 'en' else 'Perbaiki di bagian'}:** {fix_area_text}")
+            st.markdown("**Practical steps:**" if get_language() == "en" else "**Langkah praktis:**")
+            for step in practical_steps:
                 st.markdown(f"- {step}")
 
     with tab_ai_expert:
         with st.container(border=True):
-            st.markdown("### 🤖 AI Expert Insight (Thinking Logic)")
+            st.markdown("### AI Expert Insight (Thinking Logic)" if get_language() == "en" else "### Insight AI Expert (Logika Berpikir)")
             if report.expert_insight:
                 # Handle potential error response from API
                 if "error" in report.expert_insight:
                     st.error(report.expert_insight["error"])
                 else:
                     # Executive Summary
-                    st.markdown(f"**Executive Summary:**\n\n{report.expert_insight.get('executive_summary', '')}")
+                    st.markdown(f"**{'Executive Summary' if get_language() == 'en' else 'Ringkasan Eksekutif'}:**\n\n{report.expert_insight.get('executive_summary', '')}")
                     
                     # Findings & Production Mimics
                     col_f1, col_f2 = st.columns(2)
                     with col_f1:
-                        st.markdown("**Top Findings:**")
+                        st.markdown("**Top Findings:**" if get_language() == "en" else "**Temuan Utama:**")
                         for finding in report.expert_insight.get("top_findings", []):
-                            st.markdown(f"✅ {finding}")
+                            st.markdown(f"- {finding}")
                     with col_f2:
-                        st.markdown("**Could be Production (False Positives):**")
+                        st.markdown("**Could be Production (False Positives):**" if get_language() == "en" else "**Mungkin Hanya Produksi (False Positive):**")
                         for mimic in report.expert_insight.get("could_be_production", []):
-                            st.markdown(f"⚠️ {mimic}")
+                            st.markdown(f"- {mimic}")
                     
                     # Manual Checks
-                    st.markdown("**Manual Checks Needed:**")
+                    st.markdown("**Manual Checks Needed:**" if get_language() == "en" else "**Pemeriksaan Manual yang Disarankan:**")
                     for check in report.expert_insight.get("manual_checks", []):
                         st.markdown(f"- [ ] {check}")
                     
                     # Confidence Explainer
-                    with st.expander("AI Reasoning & Gaps (Deep Logic)", expanded=False):
+                    with st.expander("AI Reasoning & Gaps (Deep Logic)" if get_language() == "en" else "Logika AI & Celah Analisis", expanded=False):
                         explainer = report.expert_insight.get("confidence_explainer", {})
-                        st.markdown(f"**Reasoning:** {explainer.get('reasoning', '')}")
-                        st.markdown(f"**Gap Analysis:** {explainer.get('gap', '')}")
+                        st.markdown(f"**{'Reasoning' if get_language() == 'en' else 'Penalaran'}:** {explainer.get('reasoning', '')}")
+                        st.markdown(f"**{'Gap Analysis' if get_language() == 'en' else 'Analisis Celah'}:** {explainer.get('gap', '')}")
             else:
-                st.caption("Klik tombol di bawah untuk meminta modul AI (OpenAI) menganalisa data forensik ini lebih mendalam.")
-                if st.button("🔍 Generate Expert Insight", key=f"gen_insight_{report.metadata.filename}"):
-                    with st.spinner("Menghubungi AI Expert..."):
+                st.caption("Click the button below to ask the AI module (OpenAI) for a deeper forensic explanation." if get_language() == "en" else "Klik tombol di bawah untuk meminta modul AI (OpenAI) menganalisa data forensik ini lebih mendalam.")
+                if st.button("Generate Expert Insight" if get_language() == "en" else "Buat Insight Expert", key=f"gen_insight_{report.metadata.filename}"):
+                    with st.spinner("Contacting AI Expert..." if get_language() == "en" else "Menghubungi AI Expert..."):
                         selected_history_id = history_entry.get("id") if history_entry else None
                         insight_json = generate_expert_insight(report)
                         if insight_json:
@@ -1244,118 +1609,128 @@ def render_report(report: AnalysisReport, mode: str, y=None, sr=None, history_en
                             st.rerun()
 
     with tab_raw_data:
-        st.markdown("### 🛠️ Raw Evidence Data (JSON)")
-        st.markdown("**1. Copy System Prompt (Instruksi AI):**")
-        st.code("Anda auditor forensik audio senior. Anda tidak mendengar audio, hanya membaca metrik. Jelaskan secara jujur. Jangan menyebut Suno/Udio sebagai kepastian kecuali ada metadata eksplisit atau fingerprint sangat kuat.", language="text")
+        st.markdown("### Raw Evidence Data (JSON)" if get_language() == "en" else "### Data Bukti Mentah (JSON)")
+        st.markdown("**1. Copy System Prompt (AI Instruction):**" if get_language() == "en" else "**1. Copy System Prompt (Instruksi AI):**")
+        st.code(
+            "You are a senior audio forensics auditor. You do not hear the audio; you only read metrics. Explain honestly. Do not mention Suno/Udio as certainty unless there is explicit metadata or a very strong fingerprint."
+            if get_language() == "en"
+            else "Anda auditor forensik audio senior. Anda tidak mendengar audio, hanya membaca metrik. Jelaskan secara jujur. Jangan menyebut Suno/Udio sebagai kepastian kecuali ada metadata eksplisit atau fingerprint sangat kuat.",
+            language="text",
+        )
         
-        st.markdown("**2. Copy Data JSON (Metrik Teknis):**")
-        st.caption("Copy JSON di bawah ini untuk ditempelkan ke ChatGPT atau alat analisa eksternal lainnya.")
+        st.markdown("**2. Copy Data JSON (Technical Metrics):**" if get_language() == "en" else "**2. Copy Data JSON (Metrik Teknis):**")
+        st.caption("Copy the JSON below and paste it into ChatGPT or another external analysis tool." if get_language() == "en" else "Copy JSON di bawah ini untuk ditempelkan ke ChatGPT atau alat analisa eksternal lainnya.")
         payload = get_minimal_payload(report)
         st.code(json.dumps(payload, indent=2, ensure_ascii=False), language="json")
-        st.info("💡 Data di atas adalah 'sidik jari' teknis lagu ini yang dikirim ke modul AI. Tidak mengandung audio mentah.")
+        st.info("The data above is the technical fingerprint sent to the AI module. It does not contain raw audio." if get_language() == "en" else "Data di atas adalah 'sidik jari' teknis lagu ini yang dikirim ke modul AI. Tidak mengandung audio mentah.")
 
     if history_entry is None and not DEMO_MODE:
         latest_upload = st.session_state.get("latest_analyzed_upload")
         if latest_upload:
             with st.container(border=True):
-                st.markdown("### Simpan ke Dataset")
-                st.caption("Pilih label yang benar jika file upload ini ingin dijadikan tambahan dataset training.")
+                st.markdown("### Save to Dataset" if get_language() == "en" else "### Simpan ke Dataset")
+                st.caption("Choose the correct label if this uploaded file should become additional training data." if get_language() == "en" else "Pilih label yang benar jika file upload ini ingin dijadikan tambahan dataset training.")
                 c1, c2, c3 = st.columns(3)
-                if c1.button("Tambahkan ke Dataset Human", key="save_dataset_human"):
+                if c1.button("Add to Human Dataset" if get_language() == "en" else "Tambahkan ke Dataset Human", key="save_dataset_human"):
                     saved_path = add_uploaded_audio_to_dataset("human", latest_upload["name"], latest_upload["bytes"])
                     save_training_features("human", report, saved_path)
-                    st.success(f"File disimpan ke dataset human: {saved_path.name}")
-                if c2.button("Tambahkan ke Dataset Hybrid", key="save_dataset_hybrid"):
+                    st.success(f"File saved to human dataset: {saved_path.name}" if get_language() == "en" else f"File disimpan ke dataset human: {saved_path.name}")
+                if c2.button("Add to Hybrid Dataset" if get_language() == "en" else "Tambahkan ke Dataset Hybrid", key="save_dataset_hybrid"):
                     saved_path = add_uploaded_audio_to_dataset("hybrid", latest_upload["name"], latest_upload["bytes"])
                     save_training_features("hybrid", report, saved_path)
-                    st.success(f"File disimpan ke dataset hybrid: {saved_path.name}")
-                if c3.button("Tambahkan ke Dataset AI", key="save_dataset_ai"):
+                    st.success(f"File saved to hybrid dataset: {saved_path.name}" if get_language() == "en" else f"File disimpan ke dataset hybrid: {saved_path.name}")
+                if c3.button("Add to AI Dataset" if get_language() == "en" else "Tambahkan ke Dataset AI", key="save_dataset_ai"):
                     saved_path = add_uploaded_audio_to_dataset("ai", latest_upload["name"], latest_upload["bytes"])
                     save_training_features("ai", report, saved_path)
-                    st.success(f"File disimpan ke dataset ai: {saved_path.name}")
-                st.caption("Setelah beberapa file ditambahkan, kamu bisa train ulang model dari dataset yang sudah diperbarui.")
+                    st.success(f"File saved to AI dataset: {saved_path.name}" if get_language() == "en" else f"File disimpan ke dataset ai: {saved_path.name}")
+                st.caption("After a few files have been added, you can retrain the model from the updated dataset." if get_language() == "en" else "Setelah beberapa file ditambahkan, kamu bisa train ulang model dari dataset yang sudah diperbarui.")
 
-    st.markdown("### Detail")
-    st.markdown(f"- Duration: {int(report.metadata.duration_sec)} seconds")
-    st.markdown("- **Verdict probabilities (headline basis):**")
-    st.markdown(f"  - Source used: {report.headline_probability_source}")
-    st.markdown(f"  - {report.headline_probabilities.verdict_text}")
-    st.markdown(f"  - Human: probability ({report.headline_probabilities.human}%)")
-    st.markdown(f"  - Pure AI: probability ({report.headline_probabilities.ai}%)")
-    st.markdown(f"  - Hybrid: probability ({report.headline_probabilities.hybrid}%)")
+    st.markdown(f"### {t('detail')}")
+    st.markdown(f"- {t('duration')}: {int(report.metadata.duration_sec)} {'seconds' if get_language() == 'en' else 'detik'}")
+    st.markdown(f"- **{t('headline_basis')}:**")
+    st.markdown(f"  - {t('source_used')}: {ui_text(report.headline_probability_source)}")
+    st.markdown(f"  - {translate_generated_text(report.headline_probabilities.verdict_text)}")
+    prob_word = "probability" if get_language() == "en" else "probabilitas"
+    st.markdown(f"  - {t('human')}: {prob_word} ({report.headline_probabilities.human}%)")
+    st.markdown(f"  - {t('pure_ai')}: {prob_word} ({report.headline_probabilities.ai}%)")
+    st.markdown(f"  - {t('hybrid')}: {prob_word} ({report.headline_probabilities.hybrid}%)")
 
-    st.markdown("- **ML probabilities (detail transparency):**")
-    st.markdown(f"  - Engine used: {report.analysis_engine}")
-    st.markdown(f"  - {report.final_probabilities.verdict_text}")
-    st.markdown(f"  - Human: probability ({report.final_probabilities.human}%)")
-    st.markdown(f"  - Pure AI: probability ({report.final_probabilities.ai}%)")
-    st.markdown(f"  - Hybrid: probability ({report.final_probabilities.hybrid}%)")
+    st.markdown(f"- **{t('ml_probs_detail')}:**")
+    st.markdown(f"  - {t('engine_used')}: {ui_text(report.analysis_engine)}")
+    st.markdown(f"  - {translate_generated_text(report.final_probabilities.verdict_text)}")
+    st.markdown(f"  - {t('human')}: {prob_word} ({report.final_probabilities.human}%)")
+    st.markdown(f"  - {t('pure_ai')}: {prob_word} ({report.final_probabilities.ai}%)")
+    st.markdown(f"  - {t('hybrid')}: {prob_word} ({report.final_probabilities.hybrid}%)")
 
-    st.markdown("- **Heuristic combined probabilities:**")
-    st.markdown(f"  - {report.heuristic_combined_analysis.verdict_text}")
-    st.markdown(f"  - Human: probability ({report.heuristic_combined_analysis.human}%)")
-    st.markdown(f"  - Pure AI: probability ({report.heuristic_combined_analysis.ai}%)")
-    st.markdown(f"  - Hybrid: probability ({report.heuristic_combined_analysis.hybrid}%)")
+    st.markdown(f"- **{t('heuristic_combined')}:**")
+    st.markdown(f"  - {translate_generated_text(report.heuristic_combined_analysis.verdict_text)}")
+    st.markdown(f"  - {t('human')}: {prob_word} ({report.heuristic_combined_analysis.human}%)")
+    st.markdown(f"  - {t('pure_ai')}: {prob_word} ({report.heuristic_combined_analysis.ai}%)")
+    st.markdown(f"  - {t('hybrid')}: {prob_word} ({report.heuristic_combined_analysis.hybrid}%)")
 
-    st.markdown("- **Heuristic spectral analysis:**")
-    st.markdown(f"  - {report.spectral_analysis.verdict_text}")
-    st.markdown(f"  - Human: probability ({report.spectral_analysis.human}%)")
-    st.markdown(f"  - Pure AI: probability ({report.spectral_analysis.ai}%)")
-    st.markdown(f"  - Hybrid: probability ({report.spectral_analysis.hybrid}%)")
+    st.markdown(f"- **{t('heuristic_spectral')}:**")
+    st.markdown(f"  - {translate_generated_text(report.spectral_analysis.verdict_text)}")
+    st.markdown(f"  - {t('human')}: {prob_word} ({report.spectral_analysis.human}%)")
+    st.markdown(f"  - {t('pure_ai')}: {prob_word} ({report.spectral_analysis.ai}%)")
+    st.markdown(f"  - {t('hybrid')}: {prob_word} ({report.spectral_analysis.hybrid}%)")
 
-    st.markdown("- **Heuristic temporal analysis:**")
-    st.markdown(f"  - {report.temporal_analysis.verdict_text}")
-    st.markdown(f"  - Human: probability ({report.temporal_analysis.human}%)")
-    st.markdown(f"  - Pure AI: probability ({report.temporal_analysis.ai}%)")
-    st.markdown(f"  - Hybrid: probability ({report.temporal_analysis.hybrid}%)")
+    st.markdown(f"- **{t('heuristic_temporal')}:**")
+    st.markdown(f"  - {translate_generated_text(report.temporal_analysis.verdict_text)}")
+    st.markdown(f"  - {t('human')}: {prob_word} ({report.temporal_analysis.human}%)")
+    st.markdown(f"  - {t('pure_ai')}: {prob_word} ({report.temporal_analysis.ai}%)")
+    st.markdown(f"  - {t('hybrid')}: {prob_word} ({report.temporal_analysis.hybrid}%)")
 
-    if len(report.limitations_warnings) > 0:
+    if len(limitations_warnings) > 0:
         st.markdown("---")
-        st.markdown("**Peringatan & Rekomendasi:**")
-        for warning in report.limitations_warnings:
+        st.markdown("**Warnings & Recommendations:**" if get_language() == "en" else "**Peringatan & Rekomendasi:**")
+        for warning in limitations_warnings:
             st.info(warning)
     if not MODEL_IS_RELIABLE:
         st.warning(MODEL_STATUS)
     elif report.confidence_label == "low":
-        st.warning("Prediksi model untuk audio ini masih low confidence, jadi hasil akhir memakai heuristik.")
+        st.warning("This audio prediction is still low confidence, so the final result falls back to heuristics." if get_language() == "en" else "Prediksi model untuk audio ini masih low confidence, jadi hasil akhir memakai heuristik.")
 
-    if "Mode A" in mode:
-        st.header("Mode A: Analisis Ultra-Akurat")
-        tab1, tab2, tab3, tab4 = st.tabs(["1. Layer Metadata", "2. Metrik DSP Rinci", "3. Advanced Feature Parity", "4. Grafik"])
+    if mode == "A":
+        st.header("Mode A: Deep Analysis" if get_language() == "en" else "Mode A: Analisis Ultra-Akurat")
+        tab1, tab2, tab3, tab4 = st.tabs(
+            ["1. Metadata Layer", "2. Detailed DSP Metrics", "3. Advanced Feature Parity", "4. Charts"]
+            if get_language() == "en"
+            else ["1. Layer Metadata", "2. Metrik DSP Rinci", "3. Advanced Feature Parity", "4. Grafik"]
+        )
 
         with tab1:
             st.json(report.metadata.model_dump())
             if history_entry is not None and history_entry.get("reference_link"):
-                st.caption(f"Link referensi: {history_entry['reference_link']}")
+                st.caption(f"{'Reference link' if get_language() == 'en' else 'Link referensi'}: {history_entry['reference_link']}")
             if report.metadata.ai_tags_found:
-                st.error(f"AI tags terdeteksi di metadata: {report.metadata.ai_tags_found}")
+                st.error(f"{'AI tags detected in metadata' if get_language() == 'en' else 'AI tags terdeteksi di metadata'}: {report.metadata.ai_tags_found}")
         with tab2:
             st.json(report.dsp.model_dump())
-            st.markdown("### Red Flags")
-            for item in report.red_flags:
+            st.markdown("### Red Flags" if get_language() == "en" else "### Tanda Peringatan")
+            for item in red_flags:
                 st.warning(item)
-            if report.strong_red_flags:
-                st.markdown("### Strong AI Indicators")
-                for item in report.strong_red_flags:
+            if strong_red_flags:
+                st.markdown("### Strong AI Indicators" if get_language() == "en" else "### Indikator AI Kuat")
+                for item in strong_red_flags:
                     st.error(item)
-            if report.weak_indicators:
-                st.markdown("### Weak Indicators")
-                for item in report.weak_indicators:
+            if weak_indicators:
+                st.markdown("### Weak Indicators" if get_language() == "en" else "### Indikator Lemah")
+                for item in weak_indicators:
                     st.warning(item)
-            if report.production_mimic_indicators:
-                st.markdown("### Production-Mimic Indicators")
-                for item in report.production_mimic_indicators:
+            if production_mimic_indicators:
+                st.markdown("### Production-Mimic Indicators" if get_language() == "en" else "### Indikator yang Bisa Mirip Produksi Modern")
+                for item in production_mimic_indicators:
                     st.info(item)
             if report.ambiguous_red_flags:
-                st.markdown("### Ambiguous Indicators")
-                for item in report.ambiguous_red_flags:
+                st.markdown("### Ambiguous Indicators" if get_language() == "en" else "### Indikator Ambigu")
+                for item in translate_generated_list(report.ambiguous_red_flags):
                     st.warning(item)
             if report.normal_production_flags:
-                st.markdown("### Normal Production Choices That Can Mimic AI")
-                for item in report.normal_production_flags:
+                st.markdown("### Normal Production Choices That Can Mimic AI" if get_language() == "en" else "### Pilihan Produksi Normal yang Bisa Terbaca Mirip AI")
+                for item in translate_generated_list(report.normal_production_flags):
                     st.info(item)
         with tab3:
-            st.markdown("### Matrix Parity Berdasarkan SubmitHub")
+            st.markdown("### SubmitHub-style Matrix Parity" if get_language() == "en" else "### Matrix Parity Berdasarkan SubmitHub")
 
             c_w60 = report.submithub.harmonic_consistency_chroma.w60s
             m_w60 = report.submithub.texture_consistency_mel.w60s
@@ -1401,30 +1776,30 @@ def render_report(report: AnalysisReport, mode: str, y=None, sr=None, history_en
                 st.plotly_chart(plot_f0(y, sr), use_container_width=True)
                 st.plotly_chart(plot_spectrum(y, sr), use_container_width=True)
             else:
-                st.info("Grafik tidak tersedia untuk item history karena source audio asli tidak disimpan.")
+                st.info("Charts are not available for history items because the original audio source is not stored." if get_language() == "en" else "Grafik tidak tersedia untuk item history karena source audio asli tidak disimpan.")
 
-    elif "Mode C" in mode:
-        st.header("Mode C: Humanization Editing Focus")
-        st.markdown("Panduan langkah demi langkah untuk melakukan perbaikan di DAW, khususnya BandLab:")
-        if len(report.humanization_guide) > 0:
-            for idx, step in enumerate(report.humanization_guide, start=1):
+    elif mode == "C":
+        st.header(t("mode_c"))
+        st.markdown("Step-by-step guidance for making edits in a DAW, especially BandLab:" if get_language() == "en" else "Panduan langkah demi langkah untuk melakukan perbaikan di DAW, khususnya BandLab:")
+        if len(humanization_guide) > 0:
+            for idx, step in enumerate(humanization_guide, start=1):
                 st.info(f"{idx}. {step}")
         else:
-            st.success("Audio terlihat sudah natural. Tidak banyak humanisasi diperlukan.")
+            st.success("The audio already sounds natural. Not much humanization is needed." if get_language() == "en" else "Audio terlihat sudah natural. Tidak banyak humanisasi diperlukan.")
 
 if DEMO_MODE:
-    workspace_tab, how_it_works_tab = st.tabs(["Workspace", "How It Works"])
+    workspace_tab, how_it_works_tab = st.tabs([t("workspace_tab"), t("how_it_works_tab")])
     with workspace_tab:
-        st.caption("Area publik untuk upload audio, menjalankan analisis, dan membaca hasil screening secara cepat.")
-        st.info("Online demo mode aktif. Training, dataset, dan history persisten disembunyikan agar penggunaan publik tetap aman.")
+        st.caption(t("workspace_public_caption"))
+        st.info(t("workspace_public_info"))
     with how_it_works_tab:
         render_how_it_works_panel()
 else:
     workspace_tab, training_tab, history_tab, how_it_works_tab = st.tabs(
-        ["Workspace", "Training & Dataset", "History", "How It Works"]
+        [t("workspace_tab"), t("training_tab"), t("history_tab"), t("how_it_works_tab")]
     )
     with workspace_tab:
-        st.caption("Area kerja utama untuk menjalankan analisis dan melihat progres proses saat ini.")
+        st.caption(t("workspace_local_caption"))
     with training_tab:
         render_training_panel()
     with history_tab:
@@ -1508,4 +1883,6 @@ if current_report is None and selected_history_id:
 
 if current_report is not None:
     render_report(current_report, mode, y=current_y, sr=current_sr, history_entry=current_history_entry)
+
+
 
