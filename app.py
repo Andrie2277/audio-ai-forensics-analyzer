@@ -89,6 +89,53 @@ def render_online_analytics() -> None:
     st.session_state["_aa_analytics_injected"] = True
 
 
+def analytics_provider() -> str:
+    return get_secret_env("ANALYTICS_PROVIDER", "").lower()
+
+
+def analytics_is_enabled() -> bool:
+    provider = analytics_provider()
+    if provider == "plausible":
+        return bool(get_secret_env("PLAUSIBLE_DOMAIN", ""))
+    if provider == "ga4":
+        return bool(get_secret_env("GA_MEASUREMENT_ID", ""))
+    return False
+
+
+def emit_analytics_event(event_name: str, props: Optional[dict] = None) -> None:
+    if not analytics_is_enabled():
+        return
+
+    props = props or {}
+    event_json = json.dumps(event_name)
+    props_json = json.dumps(props)
+    provider = analytics_provider()
+
+    if provider == "plausible":
+        snippet = f"""
+        <script>
+          if (window.plausible) {{
+            window.plausible({event_json}, {{ props: {props_json} }});
+          }}
+        </script>
+        """
+    elif provider == "ga4":
+        snippet = f"""
+        <script>
+          if (window.gtag) {{
+            window.gtag('event', {event_json}, {props_json});
+          }}
+        </script>
+        """
+    else:
+        return
+
+    try:
+        st.html(snippet, unsafe_allow_javascript=True)
+    except TypeError:
+        st.html(snippet)
+
+
 DEMO_MODE = is_demo_mode()
 MODEL_BUNDLE = load_model_bundle()
 MODEL_IS_RELIABLE, MODEL_STATUS = assess_model_reliability(MODEL_BUNDLE)
@@ -1022,6 +1069,40 @@ with control_col:
         }[value],
     )
     analyze_clicked = st.button(t("run_analysis"), disabled=uploaded_file is None, use_container_width=True)
+
+    current_upload_name = uploaded_file.name if uploaded_file is not None else ""
+    previous_upload_name = st.session_state.get("_analytics_last_upload_name", "")
+    if current_upload_name and current_upload_name != previous_upload_name:
+        emit_analytics_event(
+            "upload_audio",
+            {
+                "filename": current_upload_name,
+                "extension": Path(current_upload_name).suffix.lower(),
+                "mode": mode,
+            },
+        )
+    st.session_state["_analytics_last_upload_name"] = current_upload_name
+
+    previous_mode = st.session_state.get("_analytics_last_mode")
+    if previous_mode is not None and previous_mode != mode:
+        emit_analytics_event(
+            "change_mode",
+            {
+                "from": previous_mode,
+                "to": mode,
+            },
+        )
+    st.session_state["_analytics_last_mode"] = mode
+
+    if analyze_clicked and uploaded_file is not None:
+        emit_analytics_event(
+            "run_analysis",
+            {
+                "mode": mode,
+                "filename": uploaded_file.name,
+                "extension": Path(uploaded_file.name).suffix.lower(),
+            },
+        )
 
 with ops_col:
     if DEMO_MODE:

@@ -91,6 +91,19 @@ Catatan:
 - kalau secret analytics tidak diisi, app tetap berjalan normal
 - mode demo tetap fokus ke analisis publik, bukan tracking identitas pengguna
 
+### Event yang Otomatis Dicatat
+
+Kalau analytics aktif, app juga akan mengirim event ringan berikut:
+
+- `upload_audio`
+- `change_mode`
+- `run_analysis`
+
+Tujuannya agar kamu tidak hanya melihat pageview, tetapi juga:
+- berapa kali user upload file
+- mode analisis mana yang paling sering dipakai
+- berapa kali tombol analisis benar-benar dijalankan
+
 ## Catatan Penting: Python Version
 
 Project ini memakai requirement Python:
