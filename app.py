@@ -1244,16 +1244,12 @@ def render_how_it_works_panel():
         """,
         unsafe_allow_html=True,
     )
-    cards_html = "".join(
-        f"""
-        <div class="aa-summary-card">
-            <div class="aa-summary-card-title">{title}</div>
-            <p>{body}</p>
-        </div>
-        """
-        for title, body in summary_cards
-    )
-    st.markdown(f'<div class="aa-summary-grid">{cards_html}</div>', unsafe_allow_html=True)
+    card_cols = st.columns(2)
+    for idx, (title, body) in enumerate(summary_cards):
+        with card_cols[idx % 2]:
+            with st.container(border=True):
+                st.markdown(f"**{title}**")
+                st.write(body)
     st.info(info_text)
 
     st.markdown("### How the Model Works" if is_en else "### Bagaimana Model Bekerja")
