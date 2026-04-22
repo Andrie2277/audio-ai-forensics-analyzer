@@ -13,6 +13,7 @@ import librosa
 import numpy as np
 import plotly.graph_objects as go
 import streamlit as st
+import streamlit.components.v1 as components
 
 from analyzer_ml import build_feature_vector, compute_dsp_metrics, evaluate_audio, extract_metadata
 from ml_pipeline import (
@@ -40,6 +41,50 @@ def is_demo_mode() -> bool:
         secret_value = None
     value = str(secret_value if secret_value is not None else os.getenv("AUDIO_ANALYZER_DEMO_MODE", "0")).strip().lower()
     return value in {"1", "true", "yes", "on"}
+
+
+def get_secret_env(name: str, default: str = "") -> str:
+    secret_value = None
+    try:
+        secret_value = st.secrets.get(name)
+    except Exception:
+        secret_value = None
+    value = secret_value if secret_value is not None else os.getenv(name, default)
+    return str(value or default).strip()
+
+
+def render_online_analytics() -> None:
+    if st.session_state.get("_aa_analytics_injected"):
+        return
+
+    provider = get_secret_env("ANALYTICS_PROVIDER", "").lower()
+    snippet = ""
+
+    if provider == "plausible":
+        domain = get_secret_env("PLAUSIBLE_DOMAIN", "")
+        script_url = get_secret_env("PLAUSIBLE_SCRIPT_URL", "https://plausible.io/js/script.js")
+        if domain:
+            snippet = f"""
+            <script defer data-domain="{domain}" src="{script_url}"></script>
+            """
+    elif provider == "ga4":
+        measurement_id = get_secret_env("GA_MEASUREMENT_ID", "")
+        if measurement_id:
+            snippet = f"""
+            <script async src="https://www.googletagmanager.com/gtag/js?id={measurement_id}"></script>
+            <script>
+              window.dataLayer = window.dataLayer || [];
+              function gtag() {{ dataLayer.push(arguments); }}
+              gtag('js', new Date());
+              gtag('config', '{measurement_id}', {{'anonymize_ip': true}});
+            </script>
+            """
+
+    if not snippet:
+        return
+
+    components.html(snippet, height=0, width=0)
+    st.session_state["_aa_analytics_injected"] = True
 
 
 DEMO_MODE = is_demo_mode()
@@ -947,6 +992,8 @@ def render_skipped_files(report: Optional[dict]):
 
 
 render_dashboard_header()
+if DEMO_MODE:
+    render_online_analytics()
 render_workspace_overview()
 
 control_col, ops_col = st.columns([1.35, 0.85], gap="large")

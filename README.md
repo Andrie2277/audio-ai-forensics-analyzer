@@ -136,6 +136,14 @@ Ringkasnya:
 - sediakan `model.joblib`
 - aktifkan flag `AUDIO_ANALYZER_DEMO_MODE=1`
 
+Analytics ringan untuk versi online juga sudah didukung. Lihat panduan:
+
+- [DEPLOY_ONLINE_DEMO.md](D:/My%20Project/Audio_Analyzer/DEPLOY_ONLINE_DEMO.md)
+
+Pilihan analytics yang tersedia:
+- `Plausible`
+- `Google Analytics 4`
+
 Saat mode demo aktif:
 - tab `Training & Dataset` disembunyikan
 - tab `History` disembunyikan

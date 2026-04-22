@@ -60,6 +60,37 @@ AUDIO_ANALYZER_DEMO_MODE=1
 
 6. Deploy aplikasi.
 
+## Analytics Ringan (Opsional)
+
+Mode online demo sekarang mendukung analytics ringan yang bisa diaktifkan lewat secrets.
+
+### Opsi 1: Plausible (Disarankan)
+
+Tambahkan secrets berikut:
+
+```toml
+AUDIO_ANALYZER_DEMO_MODE="1"
+ANALYTICS_PROVIDER="plausible"
+PLAUSIBLE_DOMAIN="audio-ai-forensics-analyzer.streamlit.app"
+```
+
+Kalau kamu memakai domain lain nanti, cukup ganti nilai `PLAUSIBLE_DOMAIN`.
+
+### Opsi 2: Google Analytics 4
+
+Tambahkan secrets berikut:
+
+```toml
+AUDIO_ANALYZER_DEMO_MODE="1"
+ANALYTICS_PROVIDER="ga4"
+GA_MEASUREMENT_ID="G-XXXXXXXXXX"
+```
+
+Catatan:
+- analytics hanya aktif jika provider dan secret-nya diisi
+- kalau secret analytics tidak diisi, app tetap berjalan normal
+- mode demo tetap fokus ke analisis publik, bukan tracking identitas pengguna
+
 ## Catatan Penting: Python Version
 
 Project ini memakai requirement Python:
