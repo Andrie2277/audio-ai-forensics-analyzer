@@ -663,11 +663,24 @@ def inject_custom_css():
             color: #1f2924 !important;
         }
         [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] {
-            background: #262730 !important;
-            color: #f8faf8 !important;
+            background: rgba(255,255,255,0.96) !important;
+            color: #183128 !important;
+            border: 1px solid rgba(18, 50, 39, 0.12) !important;
+            box-shadow: 0 8px 24px rgba(19, 34, 27, 0.06) !important;
         }
         [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] * {
-            color: #f8faf8 !important;
+            color: #183128 !important;
+        }
+        [data-testid="stFileUploader"] section[data-testid="stFileUploadDropzone"] button,
+        [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] button {
+            background: #f6f3eb !important;
+            color: #183128 !important;
+            border: 1px solid rgba(18, 50, 39, 0.14) !important;
+        }
+        [data-testid="stFileUploader"] section[data-testid="stFileUploadDropzone"] button:hover,
+        [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] button:hover {
+            background: #ece7db !important;
+            color: #183128 !important;
         }
         [data-testid="stFileUploader"] [data-testid="stBaseButton-secondary"],
         [data-testid="stFileUploader"] [data-testid="stBaseButton-secondary"] * {
