@@ -7,7 +7,13 @@ from models import AnalysisReport
 
 # Load environment variables (API Key)
 load_dotenv()
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+
+def get_openai_client() -> Optional[OpenAI]:
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        return None
+    return OpenAI(api_key=api_key)
 
 SYSTEM_PROMPT = """
 Anda adalah Auditor Forensik Audio Senior. Anda tidak mendengar audio, hanya membaca metrik teknis. 
@@ -89,7 +95,8 @@ def generate_expert_insight(report: AnalysisReport) -> Optional[Dict]:
     """
     Mengirimkan payload 'Minimal' ke OpenAI dan mendapatkan respons JSON terstruktur.
     """
-    if not os.getenv("OPENAI_API_KEY"):
+    client = get_openai_client()
+    if client is None:
         return {"error": "API Key OpenAI tidak ditemukan di file .env"}
 
     payload = get_minimal_payload(report)
