@@ -492,11 +492,23 @@ def inject_custom_css():
     st.markdown(
         """
         <style>
+        :root {
+            color-scheme: light !important;
+        }
+        html, body, [data-testid="stAppViewContainer"], [data-testid="stApp"], .stApp {
+            color-scheme: light !important;
+        }
         .stApp {
             background:
                 radial-gradient(circle at top left, rgba(26, 93, 73, 0.12), transparent 26%),
                 radial-gradient(circle at top right, rgba(177, 111, 55, 0.10), transparent 22%),
                 linear-gradient(180deg, #f7f6f1 0%, #fbfaf7 100%);
+        }
+        [data-testid="stAppViewContainer"] {
+            background:
+                radial-gradient(circle at top left, rgba(26, 93, 73, 0.12), transparent 26%),
+                radial-gradient(circle at top right, rgba(177, 111, 55, 0.10), transparent 22%),
+                linear-gradient(180deg, #f7f6f1 0%, #fbfaf7 100%) !important;
         }
         .main .block-container {
             padding-top: 2rem;

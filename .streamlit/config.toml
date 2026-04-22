@@ -5,3 +5,13 @@ maxMessageSize = 200
 
 [browser]
 gatherUsageStats = false
+
+[theme]
+base = "light"
+primaryColor = "#1f4d3d"
+backgroundColor = "#fbfaf7"
+secondaryBackgroundColor = "#f4f1e8"
+textColor = "#183128"
+
+[client]
+toolbarMode = "minimal"
