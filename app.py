@@ -2032,6 +2032,86 @@ def render_report(report: AnalysisReport, mode: str, y=None, sr=None, history_en
             else:
                 st.info("Charts are not available for history items because the original audio source is not stored." if get_language() == "en" else "Grafik tidak tersedia untuk item history karena source audio asli tidak disimpan.")
 
+    elif mode == "B":
+        st.header(t("mode_b"))
+        st.caption(
+            "Short, screening-style summary for quick review."
+            if get_language() == "en"
+            else "Ringkasan singkat bergaya screening untuk review cepat."
+        )
+        with st.container(border=True):
+            st.markdown(f"### {ui_text(report.overall_verdict)}")
+            st.markdown(
+                executive_summary_text
+                if executive_summary_text
+                else (
+                    "The system gives a short review-oriented screening summary for this file."
+                    if get_language() == "en"
+                    else "Sistem memberikan ringkasan screening singkat untuk file ini."
+                )
+            )
+            st.markdown(
+                f"- **{t('forensic_decision')}**: {ui_text(report.screening_outcome)}"
+            )
+            st.markdown(
+                f"- **{t('ml_prediction')}**: {ui_text(report.model_label)}"
+            )
+            st.markdown(
+                f"- **{t('headline_probabilities')}**: {t('human')} {report.headline_probabilities.human}% | "
+                f"{t('hybrid')} {report.headline_probabilities.hybrid}% | "
+                f"AI {report.headline_probabilities.ai}%"
+            )
+            st.markdown(
+                f"- **{t('generator_fingerprint')}**: {ui_text(report.fingerprint_level)} ({report.fingerprint_score}/100)"
+            )
+
+        col_b1, col_b2 = st.columns(2)
+        with col_b1:
+            with st.container(border=True):
+                st.markdown(
+                    "### Key Evidence" if get_language() == "en" else "### Bukti Utama"
+                )
+                if strong_red_flags:
+                    for item in strong_red_flags:
+                        st.error(item)
+                elif weak_indicators:
+                    for item in weak_indicators:
+                        st.warning(item)
+                else:
+                    st.success(
+                        "No strong evidence is active."
+                        if get_language() == "en"
+                        else "Tidak ada bukti kuat yang aktif."
+                    )
+                if production_mimic_indicators:
+                    st.markdown(
+                        "**Production-mimic indicators:**"
+                        if get_language() == "en"
+                        else "**Indikator mirip produksi modern:**"
+                    )
+                    for item in production_mimic_indicators[:3]:
+                        st.info(item)
+
+        with col_b2:
+            with st.container(border=True):
+                st.markdown(
+                    "### Practical Reading" if get_language() == "en" else "### Cara Membaca Cepat"
+                )
+                st.markdown(
+                    f"- **{'Main issue' if get_language() == 'en' else 'Masalah utama'}**: {main_issue_text}"
+                )
+                st.markdown(
+                    f"- **{'Fix area' if get_language() == 'en' else 'Perbaiki di bagian'}**: {fix_area_text}"
+                )
+                if practical_steps:
+                    st.markdown(
+                        "**Recommended next steps:**"
+                        if get_language() == "en"
+                        else "**Langkah yang disarankan:**"
+                    )
+                    for step in practical_steps[:3]:
+                        st.markdown(f"- {step}")
+
     elif mode == "C":
         st.header(t("mode_c"))
         st.markdown("Step-by-step guidance for making edits in a DAW, especially BandLab:" if get_language() == "en" else "Panduan langkah demi langkah untuk melakukan perbaikan di DAW, khususnya BandLab:")
