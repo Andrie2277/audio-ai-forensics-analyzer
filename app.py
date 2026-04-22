@@ -1381,6 +1381,7 @@ def render_report(report: AnalysisReport, mode: str, y=None, sr=None, history_en
     main_issue_text = translate_generated_text(report.main_issue)
     fix_area_text = translate_generated_text(report.fix_area)
     practical_steps = translate_generated_list(report.practical_steps)
+    red_flags = translate_generated_list(report.red_flags)
     strong_red_flags = translate_generated_list(report.strong_red_flags)
     weak_indicators = translate_generated_list(report.weak_indicators)
     production_mimic_indicators = translate_generated_list(report.production_mimic_indicators)
