@@ -556,6 +556,41 @@ def inject_custom_css():
         div[data-testid="stMetric"] div {
             color: #1f2924 !important;
         }
+        [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] {
+            background: #262730 !important;
+            color: #f8faf8 !important;
+        }
+        [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] * {
+            color: #f8faf8 !important;
+        }
+        [data-testid="stFileUploader"] [data-testid="stBaseButton-secondary"],
+        [data-testid="stFileUploader"] [data-testid="stBaseButton-secondary"] * {
+            color: #f8faf8 !important;
+        }
+        [data-testid="stFileUploader"] [data-testid="stFileUploaderFile"],
+        [data-testid="stFileUploader"] [data-testid="stFileUploaderFile"] *,
+        [data-testid="stFileUploader"] [data-testid="stFileUploaderFileName"],
+        [data-testid="stFileUploader"] [data-testid="stFileUploaderFileData"] {
+            color: #1f2924 !important;
+        }
+        [data-testid="stFileUploader"] small,
+        [data-testid="stFileUploader"] [data-testid="stCaptionContainer"],
+        [data-testid="stFileUploader"] [data-testid="stMarkdownContainer"] {
+            color: #5b6761 !important;
+        }
+        div[data-testid="stRadio"] div[role="radiogroup"] label *,
+        div[data-testid="stButton"] button *,
+        div[data-testid="stSelectbox"] label,
+        div[data-testid="stSelectbox"] div,
+        div[data-testid="stTextInput"] label,
+        div[data-testid="stTextInput"] input,
+        div[data-testid="stNumberInput"] label,
+        div[data-testid="stNumberInput"] input {
+            color: #1f2924 !important;
+        }
+        div[data-testid="stButton"] button {
+            color: #1f2924 !important;
+        }
         .aa-article {
             background: rgba(255,255,255,0.94);
             border: 1px solid rgba(18, 50, 39, 0.08);
