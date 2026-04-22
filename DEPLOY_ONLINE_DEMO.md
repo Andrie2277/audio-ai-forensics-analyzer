@@ -60,49 +60,47 @@ AUDIO_ANALYZER_DEMO_MODE=1
 
 6. Deploy aplikasi.
 
-## Analytics Ringan (Opsional)
+## Analytics Gratis
 
-Mode online demo sekarang mendukung analytics ringan yang bisa diaktifkan lewat secrets.
+Versi online demo sudah bisa memakai analytics gratis bawaan Streamlit Cloud:
+- jumlah viewer unik
+- viewer terbaru
+- aktivitas akses dasar
 
-### Opsi 1: Plausible (Disarankan)
+Untuk kebutuhan demo publik ringan, ini biasanya sudah cukup dan tidak perlu layanan tambahan berbayar.
 
-Tambahkan secrets berikut:
+Jadi secrets minimum yang disarankan cukup:
 
 ```toml
 AUDIO_ANALYZER_DEMO_MODE="1"
-ANALYTICS_PROVIDER="plausible"
-PLAUSIBLE_DOMAIN="audio-ai-forensics-analyzer.streamlit.app"
 ```
 
-Kalau kamu memakai domain lain nanti, cukup ganti nilai `PLAUSIBLE_DOMAIN`.
+## Analytics Tambahan (Opsional)
 
-### Opsi 2: Google Analytics 4
+Kalau nanti kamu memang ingin analytics tambahan di luar Streamlit, app mendukung integrasi custom tetapi **dinonaktifkan secara default**.
 
-Tambahkan secrets berikut:
+Aktifkan hanya jika memang dibutuhkan:
 
 ```toml
 AUDIO_ANALYZER_DEMO_MODE="1"
+ENABLE_CUSTOM_ANALYTICS="1"
+```
+
+Contoh provider gratis yang masih bisa dipakai nanti adalah `GA4`.
+
+### Contoh Google Analytics 4
+
+```toml
+AUDIO_ANALYZER_DEMO_MODE="1"
+ENABLE_CUSTOM_ANALYTICS="1"
 ANALYTICS_PROVIDER="ga4"
 GA_MEASUREMENT_ID="G-XXXXXXXXXX"
 ```
 
-Catatan:
-- analytics hanya aktif jika provider dan secret-nya diisi
-- kalau secret analytics tidak diisi, app tetap berjalan normal
-- mode demo tetap fokus ke analisis publik, bukan tracking identitas pengguna
-
-### Event yang Otomatis Dicatat
-
-Kalau analytics aktif, app juga akan mengirim event ringan berikut:
-
+Kalau custom analytics diaktifkan, app juga akan mengirim event ringan berikut:
 - `upload_audio`
 - `change_mode`
 - `run_analysis`
-
-Tujuannya agar kamu tidak hanya melihat pageview, tetapi juga:
-- berapa kali user upload file
-- mode analisis mana yang paling sering dipakai
-- berapa kali tombol analisis benar-benar dijalankan
 
 ## Catatan Penting: Python Version
 

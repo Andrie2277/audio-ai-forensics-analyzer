@@ -136,13 +136,11 @@ Ringkasnya:
 - sediakan `model.joblib`
 - aktifkan flag `AUDIO_ANALYZER_DEMO_MODE=1`
 
-Analytics ringan untuk versi online juga sudah didukung. Lihat panduan:
+Analytics gratis bawaan Streamlit Cloud sudah cukup untuk versi demo online. Lihat panduan:
 
 - [DEPLOY_ONLINE_DEMO.md](D:/My%20Project/Audio_Analyzer/DEPLOY_ONLINE_DEMO.md)
 
-Pilihan analytics yang tersedia:
-- `Plausible`
-- `Google Analytics 4`
+Kalau nanti butuh analytics tambahan, app juga masih mendukung integrasi custom yang bisa diaktifkan terpisah, misalnya `Google Analytics 4`.
 
 Saat mode demo aktif:
 - tab `Training & Dataset` disembunyikan

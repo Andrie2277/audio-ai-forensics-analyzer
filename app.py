@@ -52,7 +52,14 @@ def get_secret_env(name: str, default: str = "") -> str:
     return str(value or default).strip()
 
 
+def custom_analytics_enabled() -> bool:
+    value = get_secret_env("ENABLE_CUSTOM_ANALYTICS", "0").lower()
+    return value in {"1", "true", "yes", "on"}
+
+
 def render_online_analytics() -> None:
+    if not custom_analytics_enabled():
+        return
     if st.session_state.get("_aa_analytics_injected"):
         return
 
@@ -90,6 +97,8 @@ def render_online_analytics() -> None:
 
 
 def analytics_provider() -> str:
+    if not custom_analytics_enabled():
+        return ""
     return get_secret_env("ANALYTICS_PROVIDER", "").lower()
 
 
