@@ -13,7 +13,6 @@ import librosa
 import numpy as np
 import plotly.graph_objects as go
 import streamlit as st
-import streamlit.components.v1 as components
 
 from analyzer_ml import build_feature_vector, compute_dsp_metrics, evaluate_audio, extract_metadata
 from ml_pipeline import (
@@ -83,7 +82,10 @@ def render_online_analytics() -> None:
     if not snippet:
         return
 
-    components.html(snippet, height=0, width=0)
+    try:
+        st.html(snippet, unsafe_allow_javascript=True)
+    except TypeError:
+        st.html(snippet)
     st.session_state["_aa_analytics_injected"] = True
 
 
