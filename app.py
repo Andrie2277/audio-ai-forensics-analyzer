@@ -1141,6 +1141,8 @@ with control_col:
         unsafe_allow_html=True,
     )
     uploaded_file = st.file_uploader(t("upload_audio_label"), type=["wav", "mp3", "flac", "ogg"])
+    cached_upload = st.session_state.get("latest_analyzed_upload")
+    active_upload_name = uploaded_file.name if uploaded_file is not None else (cached_upload.get("name") if cached_upload else "")
     mode = st.radio(
         t("analysis_mode_label"),
         ["A", "B", "C"],
@@ -1150,7 +1152,15 @@ with control_col:
             "C": t("mode_c"),
         }[value],
     )
-    analyze_clicked = st.button(t("run_analysis"), disabled=uploaded_file is None, use_container_width=True)
+    analyze_clicked = st.button(t("run_analysis"), disabled=not bool(active_upload_name), use_container_width=True)
+    if uploaded_file is None and cached_upload:
+        st.caption(
+            (
+                f"Using the last analyzed file: `{cached_upload['name']}`"
+                if get_language() == "en"
+                else f"Menggunakan file terakhir yang sudah dianalisis: `{cached_upload['name']}`"
+            )
+        )
 
     current_upload_name = uploaded_file.name if uploaded_file is not None else ""
     previous_upload_name = st.session_state.get("_analytics_last_upload_name", "")
@@ -1176,13 +1186,13 @@ with control_col:
         )
     st.session_state["_analytics_last_mode"] = mode
 
-    if analyze_clicked and uploaded_file is not None:
+    if analyze_clicked and active_upload_name:
         emit_analytics_event(
             "run_analysis",
             {
                 "mode": mode,
-                "filename": uploaded_file.name,
-                "extension": Path(uploaded_file.name).suffix.lower(),
+                "filename": active_upload_name,
+                "extension": Path(active_upload_name).suffix.lower(),
             },
         )
 
@@ -2056,17 +2066,26 @@ current_y = None
 current_sr = None
 current_history_entry = None
 
-if analyze_clicked and uploaded_file is not None:
-    upload_bytes = uploaded_file.getbuffer().tobytes()
+if analyze_clicked and (uploaded_file is not None or st.session_state.get("latest_analyzed_upload")):
+    if uploaded_file is not None:
+        active_upload_name = uploaded_file.name
+        upload_bytes = uploaded_file.getbuffer().tobytes()
+    else:
+        cached_upload = st.session_state.get("latest_analyzed_upload") or {}
+        active_upload_name = cached_upload.get("name", "uploaded_audio.wav")
+        upload_bytes = cached_upload.get("bytes", b"")
+        if not upload_bytes:
+            st.error("No cached upload is available anymore." if get_language() == "en" else "File cache terakhir sudah tidak tersedia lagi.")
+            st.stop()
     progress_container = st.empty()
     detail_placeholder = st.empty()
 
     def update_analysis_progress(percent: int, message: str):
-        render_analysis_progress(progress_container, percent=percent, step_label=message, filename=uploaded_file.name)
+        render_analysis_progress(progress_container, percent=percent, step_label=message, filename=active_upload_name)
         detail_placeholder.caption(message)
 
     update_analysis_progress(5, "Menyiapkan file upload")
-    suffix = os.path.splitext(uploaded_file.name)[1]
+    suffix = os.path.splitext(active_upload_name)[1]
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
         tmp_file.write(upload_bytes)
         tmp_path = tmp_file.name
@@ -2104,12 +2123,12 @@ if analyze_clicked and uploaded_file is not None:
         )
         entry_id = add_history_entry(
             report=report,
-            source_name=uploaded_file.name,
+            source_name=active_upload_name,
             source_type="Upload",
             reference_link="",
         )
         st.session_state["selected_history_id"] = entry_id
-        st.session_state["latest_analyzed_upload"] = {"name": uploaded_file.name, "bytes": upload_bytes}
+        st.session_state["latest_analyzed_upload"] = {"name": active_upload_name, "bytes": upload_bytes}
         current_report = report
         current_y = y
         current_sr = sr
