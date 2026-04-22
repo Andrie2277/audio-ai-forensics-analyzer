@@ -4,7 +4,6 @@ import re
 import subprocess
 import sys
 import tempfile
-import uuid
 from datetime import datetime
 from pathlib import Path
 import csv
@@ -13,7 +12,6 @@ from typing import Optional
 import librosa
 import numpy as np
 import plotly.graph_objects as go
-import requests
 import streamlit as st
 
 from analyzer_ml import build_feature_vector, compute_dsp_metrics, evaluate_audio, extract_metadata
@@ -42,154 +40,6 @@ def is_demo_mode() -> bool:
         secret_value = None
     value = str(secret_value if secret_value is not None else os.getenv("AUDIO_ANALYZER_DEMO_MODE", "0")).strip().lower()
     return value in {"1", "true", "yes", "on"}
-
-
-def get_secret_env(name: str, default: str = "") -> str:
-    secret_value = None
-    try:
-        secret_value = st.secrets.get(name)
-    except Exception:
-        secret_value = None
-    value = secret_value if secret_value is not None else os.getenv(name, default)
-    return str(value or default).strip()
-
-
-def custom_analytics_enabled() -> bool:
-    value = get_secret_env("ENABLE_CUSTOM_ANALYTICS", "0").lower()
-    return value in {"1", "true", "yes", "on"}
-
-
-def render_online_analytics() -> None:
-    if not custom_analytics_enabled():
-        return
-    if st.session_state.get("_aa_analytics_injected"):
-        return
-
-    provider = get_secret_env("ANALYTICS_PROVIDER", "").lower()
-    snippet = ""
-
-    if provider == "plausible":
-        domain = get_secret_env("PLAUSIBLE_DOMAIN", "")
-        script_url = get_secret_env("PLAUSIBLE_SCRIPT_URL", "https://plausible.io/js/script.js")
-        if domain:
-            snippet = f"""
-            <script defer data-domain="{domain}" src="{script_url}"></script>
-            """
-    elif provider == "ga4":
-        measurement_id = get_secret_env("GA_MEASUREMENT_ID", "")
-        if measurement_id:
-            snippet = f"""
-            <script async src="https://www.googletagmanager.com/gtag/js?id={measurement_id}"></script>
-            <script>
-              window.dataLayer = window.dataLayer || [];
-              function gtag() {{ dataLayer.push(arguments); }}
-              gtag('js', new Date());
-              gtag('config', '{measurement_id}', {{'anonymize_ip': true}});
-            </script>
-            """
-
-    if not snippet:
-        return
-
-    try:
-        st.html(snippet, unsafe_allow_javascript=True)
-    except TypeError:
-        st.html(snippet)
-    st.session_state["_aa_analytics_injected"] = True
-
-
-def analytics_provider() -> str:
-    if not custom_analytics_enabled():
-        return ""
-    return get_secret_env("ANALYTICS_PROVIDER", "").lower()
-
-
-def analytics_is_enabled() -> bool:
-    provider = analytics_provider()
-    if provider == "plausible":
-        return bool(get_secret_env("PLAUSIBLE_DOMAIN", ""))
-    if provider == "ga4":
-        return bool(get_secret_env("GA_MEASUREMENT_ID", "")) and bool(get_secret_env("GA_API_SECRET", ""))
-    return False
-
-
-def analytics_client_id() -> str:
-    client_id = st.session_state.get("_analytics_client_id")
-    if not client_id:
-        client_id = str(uuid.uuid4())
-        st.session_state["_analytics_client_id"] = client_id
-    return client_id
-
-
-def send_ga4_event_server_side(event_name: str, props: Optional[dict] = None) -> None:
-    measurement_id = get_secret_env("GA_MEASUREMENT_ID", "")
-    api_secret = get_secret_env("GA_API_SECRET", "")
-    if not measurement_id or not api_secret:
-        return
-
-    props = props or {}
-    payload = {
-        "client_id": analytics_client_id(),
-        "events": [
-            {
-                "name": event_name,
-                "params": props,
-            }
-        ],
-    }
-    endpoint = f"https://www.google-analytics.com/mp/collect?measurement_id={measurement_id}&api_secret={api_secret}"
-    try:
-        requests.post(endpoint, json=payload, timeout=5)
-    except Exception:
-        pass
-
-
-def emit_analytics_event(event_name: str, props: Optional[dict] = None) -> None:
-    if not analytics_is_enabled():
-        return
-
-    props = props or {}
-    provider = analytics_provider()
-
-    if provider == "plausible":
-        event_json = json.dumps(event_name)
-        props_json = json.dumps(props)
-        snippet = f"""
-        <script>
-          if (window.plausible) {{
-            window.plausible({event_json}, {{ props: {props_json} }});
-          }}
-        </script>
-        """
-        try:
-            st.html(snippet, unsafe_allow_javascript=True)
-        except TypeError:
-            st.html(snippet)
-    elif provider == "ga4":
-        send_ga4_event_server_side(event_name, props)
-    else:
-        return
-
-
-def track_page_view_once() -> None:
-    if not analytics_is_enabled():
-        return
-    if st.session_state.get("_analytics_page_view_sent"):
-        return
-
-    provider = analytics_provider()
-    if provider == "ga4":
-        send_ga4_event_server_side(
-            "page_view",
-            {
-                "page_title": "Audio AI Forensics Analyzer",
-                "page_location": "https://audio-ai-forensics-analyzer.streamlit.app",
-                "language": get_language(),
-            },
-        )
-        st.session_state["_analytics_page_view_sent"] = True
-    elif provider == "plausible":
-        st.session_state["_analytics_page_view_sent"] = True
 
 
 DEMO_MODE = is_demo_mode()
@@ -548,23 +398,11 @@ def inject_custom_css():
     st.markdown(
         """
         <style>
-        :root {
-            color-scheme: light !important;
-        }
-        html, body, [data-testid="stAppViewContainer"], [data-testid="stApp"], .stApp {
-            color-scheme: light !important;
-        }
         .stApp {
             background:
                 radial-gradient(circle at top left, rgba(26, 93, 73, 0.12), transparent 26%),
                 radial-gradient(circle at top right, rgba(177, 111, 55, 0.10), transparent 22%),
                 linear-gradient(180deg, #f7f6f1 0%, #fbfaf7 100%);
-        }
-        [data-testid="stAppViewContainer"] {
-            background:
-                radial-gradient(circle at top left, rgba(26, 93, 73, 0.12), transparent 26%),
-                radial-gradient(circle at top right, rgba(177, 111, 55, 0.10), transparent 22%),
-                linear-gradient(180deg, #f7f6f1 0%, #fbfaf7 100%) !important;
         }
         .main .block-container {
             padding-top: 2rem;
@@ -716,54 +554,6 @@ def inject_custom_css():
         }
         div[data-testid="stMetric"] label,
         div[data-testid="stMetric"] div {
-            color: #1f2924 !important;
-        }
-        [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] {
-            background: rgba(255,255,255,0.96) !important;
-            color: #183128 !important;
-            border: 1px solid rgba(18, 50, 39, 0.12) !important;
-            box-shadow: 0 8px 24px rgba(19, 34, 27, 0.06) !important;
-        }
-        [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] * {
-            color: #183128 !important;
-        }
-        [data-testid="stFileUploader"] section[data-testid="stFileUploadDropzone"] button,
-        [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] button {
-            background: #f6f3eb !important;
-            color: #183128 !important;
-            border: 1px solid rgba(18, 50, 39, 0.14) !important;
-        }
-        [data-testid="stFileUploader"] section[data-testid="stFileUploadDropzone"] button:hover,
-        [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] button:hover {
-            background: #ece7db !important;
-            color: #183128 !important;
-        }
-        [data-testid="stFileUploader"] [data-testid="stBaseButton-secondary"],
-        [data-testid="stFileUploader"] [data-testid="stBaseButton-secondary"] * {
-            color: #f8faf8 !important;
-        }
-        [data-testid="stFileUploader"] [data-testid="stFileUploaderFile"],
-        [data-testid="stFileUploader"] [data-testid="stFileUploaderFile"] *,
-        [data-testid="stFileUploader"] [data-testid="stFileUploaderFileName"],
-        [data-testid="stFileUploader"] [data-testid="stFileUploaderFileData"] {
-            color: #1f2924 !important;
-        }
-        [data-testid="stFileUploader"] small,
-        [data-testid="stFileUploader"] [data-testid="stCaptionContainer"],
-        [data-testid="stFileUploader"] [data-testid="stMarkdownContainer"] {
-            color: #5b6761 !important;
-        }
-        div[data-testid="stRadio"] div[role="radiogroup"] label *,
-        div[data-testid="stButton"] button *,
-        div[data-testid="stSelectbox"] label,
-        div[data-testid="stSelectbox"] div,
-        div[data-testid="stTextInput"] label,
-        div[data-testid="stTextInput"] input,
-        div[data-testid="stNumberInput"] label,
-        div[data-testid="stNumberInput"] input {
-            color: #1f2924 !important;
-        }
-        div[data-testid="stButton"] button {
             color: #1f2924 !important;
         }
         .aa-article {
@@ -1122,9 +912,6 @@ def render_skipped_files(report: Optional[dict]):
 
 
 render_dashboard_header()
-if DEMO_MODE:
-    render_online_analytics()
-    track_page_view_once()
 render_workspace_overview()
 
 control_col, ops_col = st.columns([1.35, 0.85], gap="large")
@@ -1141,8 +928,6 @@ with control_col:
         unsafe_allow_html=True,
     )
     uploaded_file = st.file_uploader(t("upload_audio_label"), type=["wav", "mp3", "flac", "ogg"])
-    cached_upload = st.session_state.get("latest_analyzed_upload")
-    active_upload_name = uploaded_file.name if uploaded_file is not None else (cached_upload.get("name") if cached_upload else "")
     mode = st.radio(
         t("analysis_mode_label"),
         ["A", "B", "C"],
@@ -1152,49 +937,7 @@ with control_col:
             "C": t("mode_c"),
         }[value],
     )
-    analyze_clicked = st.button(t("run_analysis"), disabled=not bool(active_upload_name), use_container_width=True)
-    if uploaded_file is None and cached_upload:
-        st.caption(
-            (
-                f"Using the last analyzed file: `{cached_upload['name']}`"
-                if get_language() == "en"
-                else f"Menggunakan file terakhir yang sudah dianalisis: `{cached_upload['name']}`"
-            )
-        )
-
-    current_upload_name = uploaded_file.name if uploaded_file is not None else ""
-    previous_upload_name = st.session_state.get("_analytics_last_upload_name", "")
-    if current_upload_name and current_upload_name != previous_upload_name:
-        emit_analytics_event(
-            "upload_audio",
-            {
-                "filename": current_upload_name,
-                "extension": Path(current_upload_name).suffix.lower(),
-                "mode": mode,
-            },
-        )
-    st.session_state["_analytics_last_upload_name"] = current_upload_name
-
-    previous_mode = st.session_state.get("_analytics_last_mode")
-    if previous_mode is not None and previous_mode != mode:
-        emit_analytics_event(
-            "change_mode",
-            {
-                "from": previous_mode,
-                "to": mode,
-            },
-        )
-    st.session_state["_analytics_last_mode"] = mode
-
-    if analyze_clicked and active_upload_name:
-        emit_analytics_event(
-            "run_analysis",
-            {
-                "mode": mode,
-                "filename": active_upload_name,
-                "extension": Path(active_upload_name).suffix.lower(),
-            },
-        )
+    analyze_clicked = st.button(t("run_analysis"), disabled=uploaded_file is None, use_container_width=True)
 
 with ops_col:
     if DEMO_MODE:
@@ -2032,86 +1775,6 @@ def render_report(report: AnalysisReport, mode: str, y=None, sr=None, history_en
             else:
                 st.info("Charts are not available for history items because the original audio source is not stored." if get_language() == "en" else "Grafik tidak tersedia untuk item history karena source audio asli tidak disimpan.")
 
-    elif mode == "B":
-        st.header(t("mode_b"))
-        st.caption(
-            "Short, screening-style summary for quick review."
-            if get_language() == "en"
-            else "Ringkasan singkat bergaya screening untuk review cepat."
-        )
-        with st.container(border=True):
-            st.markdown(f"### {ui_text(report.overall_verdict)}")
-            st.markdown(
-                executive_summary_text
-                if executive_summary_text
-                else (
-                    "The system gives a short review-oriented screening summary for this file."
-                    if get_language() == "en"
-                    else "Sistem memberikan ringkasan screening singkat untuk file ini."
-                )
-            )
-            st.markdown(
-                f"- **{t('forensic_decision')}**: {ui_text(report.screening_outcome)}"
-            )
-            st.markdown(
-                f"- **{t('ml_prediction')}**: {ui_text(report.model_label)}"
-            )
-            st.markdown(
-                f"- **{t('headline_probabilities')}**: {t('human')} {report.headline_probabilities.human}% | "
-                f"{t('hybrid')} {report.headline_probabilities.hybrid}% | "
-                f"AI {report.headline_probabilities.ai}%"
-            )
-            st.markdown(
-                f"- **{t('generator_fingerprint')}**: {ui_text(report.fingerprint_level)} ({report.fingerprint_score}/100)"
-            )
-
-        col_b1, col_b2 = st.columns(2)
-        with col_b1:
-            with st.container(border=True):
-                st.markdown(
-                    "### Key Evidence" if get_language() == "en" else "### Bukti Utama"
-                )
-                if strong_red_flags:
-                    for item in strong_red_flags:
-                        st.error(item)
-                elif weak_indicators:
-                    for item in weak_indicators:
-                        st.warning(item)
-                else:
-                    st.success(
-                        "No strong evidence is active."
-                        if get_language() == "en"
-                        else "Tidak ada bukti kuat yang aktif."
-                    )
-                if production_mimic_indicators:
-                    st.markdown(
-                        "**Production-mimic indicators:**"
-                        if get_language() == "en"
-                        else "**Indikator mirip produksi modern:**"
-                    )
-                    for item in production_mimic_indicators[:3]:
-                        st.info(item)
-
-        with col_b2:
-            with st.container(border=True):
-                st.markdown(
-                    "### Practical Reading" if get_language() == "en" else "### Cara Membaca Cepat"
-                )
-                st.markdown(
-                    f"- **{'Main issue' if get_language() == 'en' else 'Masalah utama'}**: {main_issue_text}"
-                )
-                st.markdown(
-                    f"- **{'Fix area' if get_language() == 'en' else 'Perbaiki di bagian'}**: {fix_area_text}"
-                )
-                if practical_steps:
-                    st.markdown(
-                        "**Recommended next steps:**"
-                        if get_language() == "en"
-                        else "**Langkah yang disarankan:**"
-                    )
-                    for step in practical_steps[:3]:
-                        st.markdown(f"- {step}")
-
     elif mode == "C":
         st.header(t("mode_c"))
         st.markdown("Step-by-step guidance for making edits in a DAW, especially BandLab:" if get_language() == "en" else "Panduan langkah demi langkah untuk melakukan perbaikan di DAW, khususnya BandLab:")
@@ -2142,42 +1805,21 @@ else:
         render_how_it_works_panel()
 
 current_report = None
-current_y = st.session_state.get("current_report_waveform")
-current_sr = st.session_state.get("current_report_sr")
+current_y = None
+current_sr = None
 current_history_entry = None
 
-current_report_payload = st.session_state.get("current_report_payload")
-if current_report_payload:
-    try:
-        current_report = AnalysisReport.model_validate(current_report_payload)
-    except Exception:
-        st.session_state.pop("current_report_payload", None)
-        st.session_state.pop("current_report_waveform", None)
-        st.session_state.pop("current_report_sr", None)
-        current_report = None
-        current_y = None
-        current_sr = None
-
-if analyze_clicked and (uploaded_file is not None or st.session_state.get("latest_analyzed_upload")):
-    if uploaded_file is not None:
-        active_upload_name = uploaded_file.name
-        upload_bytes = uploaded_file.getbuffer().tobytes()
-    else:
-        cached_upload = st.session_state.get("latest_analyzed_upload") or {}
-        active_upload_name = cached_upload.get("name", "uploaded_audio.wav")
-        upload_bytes = cached_upload.get("bytes", b"")
-        if not upload_bytes:
-            st.error("No cached upload is available anymore." if get_language() == "en" else "File cache terakhir sudah tidak tersedia lagi.")
-            st.stop()
+if analyze_clicked and uploaded_file is not None:
+    upload_bytes = uploaded_file.getbuffer().tobytes()
     progress_container = st.empty()
     detail_placeholder = st.empty()
 
     def update_analysis_progress(percent: int, message: str):
-        render_analysis_progress(progress_container, percent=percent, step_label=message, filename=active_upload_name)
+        render_analysis_progress(progress_container, percent=percent, step_label=message, filename=uploaded_file.name)
         detail_placeholder.caption(message)
 
     update_analysis_progress(5, "Menyiapkan file upload")
-    suffix = os.path.splitext(active_upload_name)[1]
+    suffix = os.path.splitext(uploaded_file.name)[1]
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
         tmp_file.write(upload_bytes)
         tmp_path = tmp_file.name
@@ -2215,15 +1857,12 @@ if analyze_clicked and (uploaded_file is not None or st.session_state.get("lates
         )
         entry_id = add_history_entry(
             report=report,
-            source_name=active_upload_name,
+            source_name=uploaded_file.name,
             source_type="Upload",
             reference_link="",
         )
         st.session_state["selected_history_id"] = entry_id
-        st.session_state["latest_analyzed_upload"] = {"name": active_upload_name, "bytes": upload_bytes}
-        st.session_state["current_report_payload"] = report.model_dump()
-        st.session_state["current_report_waveform"] = y
-        st.session_state["current_report_sr"] = sr
+        st.session_state["latest_analyzed_upload"] = {"name": uploaded_file.name, "bytes": upload_bytes}
         current_report = report
         current_y = y
         current_sr = sr
@@ -2232,18 +1871,11 @@ if analyze_clicked and (uploaded_file is not None or st.session_state.get("lates
         os.remove(tmp_path)
 
 selected_history_id = st.session_state.get("selected_history_id")
-if analyze_clicked and current_report is not None:
-    current_history_entry = None
-elif current_report is None and selected_history_id:
+if current_report is None and selected_history_id:
     for entry in load_history():
         if entry["id"] == selected_history_id:
             current_history_entry = entry
             current_report = AnalysisReport.model_validate(entry["report"])
-            st.session_state["current_report_payload"] = entry["report"]
-            st.session_state["current_report_waveform"] = None
-            st.session_state["current_report_sr"] = None
-            current_y = None
-            current_sr = None
             break
 
 if current_report is not None:
