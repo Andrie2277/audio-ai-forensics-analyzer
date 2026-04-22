@@ -2062,9 +2062,21 @@ else:
         render_how_it_works_panel()
 
 current_report = None
-current_y = None
-current_sr = None
+current_y = st.session_state.get("current_report_waveform")
+current_sr = st.session_state.get("current_report_sr")
 current_history_entry = None
+
+current_report_payload = st.session_state.get("current_report_payload")
+if current_report_payload:
+    try:
+        current_report = AnalysisReport.model_validate(current_report_payload)
+    except Exception:
+        st.session_state.pop("current_report_payload", None)
+        st.session_state.pop("current_report_waveform", None)
+        st.session_state.pop("current_report_sr", None)
+        current_report = None
+        current_y = None
+        current_sr = None
 
 if analyze_clicked and (uploaded_file is not None or st.session_state.get("latest_analyzed_upload")):
     if uploaded_file is not None:
@@ -2129,6 +2141,9 @@ if analyze_clicked and (uploaded_file is not None or st.session_state.get("lates
         )
         st.session_state["selected_history_id"] = entry_id
         st.session_state["latest_analyzed_upload"] = {"name": active_upload_name, "bytes": upload_bytes}
+        st.session_state["current_report_payload"] = report.model_dump()
+        st.session_state["current_report_waveform"] = y
+        st.session_state["current_report_sr"] = sr
         current_report = report
         current_y = y
         current_sr = sr
@@ -2137,11 +2152,18 @@ if analyze_clicked and (uploaded_file is not None or st.session_state.get("lates
         os.remove(tmp_path)
 
 selected_history_id = st.session_state.get("selected_history_id")
-if current_report is None and selected_history_id:
+if analyze_clicked and current_report is not None:
+    current_history_entry = None
+elif current_report is None and selected_history_id:
     for entry in load_history():
         if entry["id"] == selected_history_id:
             current_history_entry = entry
             current_report = AnalysisReport.model_validate(entry["report"])
+            st.session_state["current_report_payload"] = entry["report"]
+            st.session_state["current_report_waveform"] = None
+            st.session_state["current_report_sr"] = None
+            current_y = None
+            current_sr = None
             break
 
 if current_report is not None:
