@@ -60,6 +60,22 @@ AUDIO_ANALYZER_DEMO_MODE=1
 
 6. Deploy aplikasi.
 
+## Catatan Penting: Python Version
+
+Project ini memakai requirement Python:
+
+```text
+>=3.13
+```
+
+Jadi saat deploy di Streamlit Community Cloud:
+
+1. klik `Advanced settings`
+2. pilih Python `3.13`
+3. baru lanjutkan deploy
+
+Kalau dibiarkan default ke `3.12`, deploy bisa gagal karena versi Python tidak cocok.
+
 ## Langkah 4: Cek Setelah Online
 
 Pastikan yang muncul:
