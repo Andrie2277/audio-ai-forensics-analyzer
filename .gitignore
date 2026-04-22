@@ -1,0 +1,34 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv/
+
+# Environment and local secrets
+.env
+
+# Streamlit / local runtime state
+analysis_history.json
+feature_store_sync_report.json
+
+# Build outputs and packaged launchers
+build_launcher/
+build_stop/
+dist_launcher/
+*.exe
+*.spec
+
+# Local backup / scratch files
+backup_20260330_pre_ml_refactor/
+*.zip
+*.tmp
+Presentasi/
+
+# Personal notes / ad-hoc exports
+Payload Minimal.txt
+saran api.txt

@@ -1,0 +1,4 @@
+path,label
+samples\human_song.wav,human
+samples\hybrid_song.wav,hybrid
+samples\ai_song.wav,ai
