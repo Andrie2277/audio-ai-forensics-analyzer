@@ -4,6 +4,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import uuid
 from datetime import datetime
 from pathlib import Path
 import csv
@@ -12,6 +13,7 @@ from typing import Optional
 import librosa
 import numpy as np
 import plotly.graph_objects as go
+import requests
 import streamlit as st
 
 from analyzer_ml import build_feature_vector, compute_dsp_metrics, evaluate_audio, extract_metadata
@@ -107,8 +109,39 @@ def analytics_is_enabled() -> bool:
     if provider == "plausible":
         return bool(get_secret_env("PLAUSIBLE_DOMAIN", ""))
     if provider == "ga4":
-        return bool(get_secret_env("GA_MEASUREMENT_ID", ""))
+        return bool(get_secret_env("GA_MEASUREMENT_ID", "")) and bool(get_secret_env("GA_API_SECRET", ""))
     return False
+
+
+def analytics_client_id() -> str:
+    client_id = st.session_state.get("_analytics_client_id")
+    if not client_id:
+        client_id = str(uuid.uuid4())
+        st.session_state["_analytics_client_id"] = client_id
+    return client_id
+
+
+def send_ga4_event_server_side(event_name: str, props: Optional[dict] = None) -> None:
+    measurement_id = get_secret_env("GA_MEASUREMENT_ID", "")
+    api_secret = get_secret_env("GA_API_SECRET", "")
+    if not measurement_id or not api_secret:
+        return
+
+    props = props or {}
+    payload = {
+        "client_id": analytics_client_id(),
+        "events": [
+            {
+                "name": event_name,
+                "params": props,
+            }
+        ],
+    }
+    endpoint = f"https://www.google-analytics.com/mp/collect?measurement_id={measurement_id}&api_secret={api_secret}"
+    try:
+        requests.post(endpoint, json=payload, timeout=5)
+    except Exception:
+        pass
 
 
 def emit_analytics_event(event_name: str, props: Optional[dict] = None) -> None:
@@ -116,11 +149,11 @@ def emit_analytics_event(event_name: str, props: Optional[dict] = None) -> None:
         return
 
     props = props or {}
-    event_json = json.dumps(event_name)
-    props_json = json.dumps(props)
     provider = analytics_provider()
 
     if provider == "plausible":
+        event_json = json.dumps(event_name)
+        props_json = json.dumps(props)
         snippet = f"""
         <script>
           if (window.plausible) {{
@@ -128,21 +161,35 @@ def emit_analytics_event(event_name: str, props: Optional[dict] = None) -> None:
           }}
         </script>
         """
+        try:
+            st.html(snippet, unsafe_allow_javascript=True)
+        except TypeError:
+            st.html(snippet)
     elif provider == "ga4":
-        snippet = f"""
-        <script>
-          if (window.gtag) {{
-            window.gtag('event', {event_json}, {props_json});
-          }}
-        </script>
-        """
+        send_ga4_event_server_side(event_name, props)
     else:
         return
 
-    try:
-        st.html(snippet, unsafe_allow_javascript=True)
-    except TypeError:
-        st.html(snippet)
+
+def track_page_view_once() -> None:
+    if not analytics_is_enabled():
+        return
+    if st.session_state.get("_analytics_page_view_sent"):
+        return
+
+    provider = analytics_provider()
+    if provider == "ga4":
+        send_ga4_event_server_side(
+            "page_view",
+            {
+                "page_title": "Audio AI Forensics Analyzer",
+                "page_location": "https://audio-ai-forensics-analyzer.streamlit.app",
+                "language": get_language(),
+            },
+        )
+        st.session_state["_analytics_page_view_sent"] = True
+    elif provider == "plausible":
+        st.session_state["_analytics_page_view_sent"] = True
 
 
 DEMO_MODE = is_demo_mode()
@@ -1077,6 +1124,7 @@ def render_skipped_files(report: Optional[dict]):
 render_dashboard_header()
 if DEMO_MODE:
     render_online_analytics()
+    track_page_view_once()
 render_workspace_overview()
 
 control_col, ops_col = st.columns([1.35, 0.85], gap="large")

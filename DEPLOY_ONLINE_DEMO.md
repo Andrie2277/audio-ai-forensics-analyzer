@@ -95,12 +95,18 @@ AUDIO_ANALYZER_DEMO_MODE="1"
 ENABLE_CUSTOM_ANALYTICS="1"
 ANALYTICS_PROVIDER="ga4"
 GA_MEASUREMENT_ID="G-XXXXXXXXXX"
+GA_API_SECRET="isi_api_secret_dari_GA4"
 ```
 
 Kalau custom analytics diaktifkan, app juga akan mengirim event ringan berikut:
 - `upload_audio`
 - `change_mode`
 - `run_analysis`
+
+Catatan penting untuk GA4:
+- integrasi di app ini memakai **Measurement Protocol (server-side)**, bukan tag HTML biasa
+- karena itu, layar "Google tag wasn't detected on your website" bisa tetap muncul dan **boleh diabaikan**
+- verifikasi terbaik dilakukan lewat **Reports > Realtime** di Google Analytics
 
 ## Catatan Penting: Python Version
 
