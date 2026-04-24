@@ -46,7 +46,18 @@ DEMO_MODE = is_demo_mode()
 MODEL_BUNDLE = load_model_bundle()
 MODEL_IS_RELIABLE, MODEL_STATUS = assess_model_reliability(MODEL_BUNDLE)
 HISTORY_PATH = Path(__file__).with_name("analysis_history.json")
-DATASET_ROOT = Path(__file__).with_name("data")
+
+
+def resolve_dataset_root() -> Path:
+    base_dir = Path(__file__).parent
+    for candidate_name in ("data", "Data"):
+        candidate = base_dir / candidate_name
+        if candidate.exists():
+            return candidate
+    return base_dir / "data"
+
+
+DATASET_ROOT = resolve_dataset_root()
 DATASET_CSV_PATH = Path(__file__).with_name("dataset.csv")
 FEATURE_STORE_PATH = Path(__file__).with_name(str(DEFAULT_FEATURE_STORE_PATH))
 SYNC_REPORT_PATH = Path(__file__).with_name("feature_store_sync_report.json")
