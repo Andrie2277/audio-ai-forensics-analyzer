@@ -1,0 +1,60 @@
+name: Keep Streamlit awake
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+jobs:
+  wake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Open app and wake if needed
+        env:
+          STREAMLIT_APP_URL: https://audio-ai-forensics-analyzer.streamlit.app/
+        run: |
+          npm init -y
+          npm install playwright@1.51.1
+          npx playwright install --with-deps chromium
+
+          node <<'NODE'
+          const { chromium } = require("playwright");
+
+          const url = process.env.STREAMLIT_APP_URL;
+
+          (async () => {
+            const browser = await chromium.launch({ headless: true });
+            const page = await browser.newPage();
+
+            console.log(`Opening ${url}`);
+            await page.goto(url, { waitUntil: "domcontentloaded", timeout: 120000 });
+
+            const wakeButton = page.getByRole("button", { name: /get this app back up/i });
+            if (await wakeButton.isVisible({ timeout: 10000 }).catch(() => false)) {
+              console.log("Sleeping page detected. Clicking wake button.");
+              await wakeButton.click();
+            } else {
+              console.log("Wake button not shown. App may already be awake.");
+            }
+
+            await page.waitForLoadState("networkidle", { timeout: 120000 }).catch(() => {});
+            await page.waitForTimeout(30000);
+
+            const title = await page.title().catch(() => "");
+            const bodyText = await page.locator("body").innerText({ timeout: 10000 }).catch(() => "");
+
+            console.log(`Page title: ${title}`);
+            console.log(`Body preview: ${bodyText.replace(/\s+/g, " ").slice(0, 500)}`);
+
+            if (/This app has gone to sleep/i.test(bodyText)) {
+              throw new Error("App still shows the sleeping page after wake attempt.");
+            }
+
+            await browser.close();
+          })().catch(async (error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
