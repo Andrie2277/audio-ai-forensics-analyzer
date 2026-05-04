@@ -1,6 +1,9 @@
 name: Keep Streamlit awake
 
 on:
+  push:
+    paths:
+      - ".github/workflows/keep-streamlit-awake.yml"
   schedule:
     - cron: "0 */6 * * *"
   workflow_dispatch:
